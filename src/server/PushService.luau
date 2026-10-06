@@ -1,117 +1,134 @@
---!strict
-
+--!nonstrict
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Config = require(game:GetService("ReplicatedStorage").Shared.Config)
+local Rules = require(game:GetService("ReplicatedStorage").Shared.Rules)
+local U = require(script.Parent.Util)
+local Combat = {}
+Combat.__index = Combat
 
-local Config = require(ReplicatedStorage.Shared.Config)
-
-local PushService = {}
-PushService.__index = PushService
-
-local function getLivingRoot(player: Player): BasePart?
-	local character = player.Character
-	if not character then
-		return nil
-	end
-
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	local root = character:FindFirstChild("HumanoidRootPart")
-	if not humanoid or humanoid.Health <= 0 or not root or not root:IsA("BasePart") then
-		return nil
-	end
-	return root
+function Combat.new(round, arena, fx)
+	return setmetatable({round = round, arena = arena, fx = fx, times = {}, ownership = {}, credit = {}}, Combat)
 end
-
-function PushService.new(pushRemote: RemoteEvent, isActive: (Player) -> boolean)
-	local self = setmetatable({}, PushService)
-	self.pushRemote = pushRemote
-	self.isActive = isActive
-	self.lastPush = {} :: { [Player]: number }
-
-	pushRemote.OnServerEvent:Connect(function(player)
-		self:_onPushRequested(player)
-	end)
-
-	Players.PlayerRemoving:Connect(function(player)
-		self.lastPush[player] = nil
-	end)
-
-	return self
-end
-
-function PushService:_findTarget(attacker: Player, attackerRoot: BasePart): BasePart?
-	local bestTarget = nil
-	local bestDistance = math.huge
-	local look = attackerRoot.CFrame.LookVector
-
-	for _, candidate in Players:GetPlayers() do
-		if candidate == attacker or not self.isActive(candidate) then
-			continue
-		end
-
-		local targetRoot = getLivingRoot(candidate)
-		if not targetRoot then
-			continue
-		end
-
-		local offset = targetRoot.Position - attackerRoot.Position
-		local distance = offset.Magnitude
-		if distance <= 0.01 or distance > Config.Push.Range then
-			continue
-		end
-
-		local facingDot = look:Dot(offset.Unit)
-		if facingDot < Config.Push.MinimumFacingDot then
-			continue
-		end
-
-		if distance < bestDistance then
-			bestDistance = distance
-			bestTarget = targetRoot
-		end
-	end
-
-	return bestTarget
-end
-
-function PushService:_onPushRequested(player: Player)
-	if not self.isActive(player) then
-		return
-	end
-
+function Combat:Ready(p, kind, cooldown)
+	local t = self.times[p] or {}; self.times[p] = t
 	local now = os.clock()
-	local previous = self.lastPush[player] or 0
-	if now - previous < Config.Push.Cooldown then
-		return
-	end
-
-	local attackerRoot = getLivingRoot(player)
-	if not attackerRoot then
-		return
-	end
-
-	local targetRoot = self:_findTarget(player, attackerRoot)
-	if not targetRoot then
-		return
-	end
-
-	self.lastPush[player] = now
-
-	local flatOffset = targetRoot.Position - attackerRoot.Position
-	flatOffset = Vector3.new(flatOffset.X, 0, flatOffset.Z)
-	if flatOffset.Magnitude < 0.01 then
-		flatOffset = Vector3.new(attackerRoot.CFrame.LookVector.X, 0, attackerRoot.CFrame.LookVector.Z)
-	end
-
-	local direction = flatOffset.Unit
-	local targetVelocityChange = direction * Config.Push.Impulse
-		+ Vector3.new(0, Config.Push.UpwardImpulse, 0)
-	targetRoot:ApplyImpulse(targetVelocityChange * targetRoot.AssemblyMass)
-
-	local recoil = -direction * Config.Push.SelfRecoil
-	attackerRoot:ApplyImpulse(recoil * attackerRoot.AssemblyMass)
-
-	self.pushRemote:FireAllClients("Impact", attackerRoot.Position, targetRoot.Position)
+	if now-(t[kind] or -100) < cooldown then return false end
+	t[kind] = now
+	return true
 end
-
-return PushService
+function Combat:Forget(p)
+	self.times[p] = nil; self.credit[p] = nil
+end
+function Combat:CanAct(p)
+	return self.round:IsActive(p) or (p:GetAttribute("InRound") ~= true and U.root(p) ~= nil)
+end
+function Combat:Enemy(a,b)
+	if b:IsA("Model") then return b:GetAttribute("Practice") == true end
+	return self.round:IsActive(a) and self.round:IsActive(b)
+		and a:GetAttribute("TeamId") ~= b:GetAttribute("TeamId")
+end
+function Combat:Visible(a,b)
+	local params = RaycastParams.new(); params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = {a.Parent,b.Parent}
+	return workspace:Raycast(a.Position,b.Position-a.Position,params) == nil
+end
+function Combat:Target(p, range, allowAlly)
+	local root = U.root(p); if not root then return nil end
+	local targets = Players:GetPlayers()
+	for _, d in self.arena.dummies do table.insert(targets,d.model) end
+	local best, bestDistance = nil, math.huge
+	for _, target in targets do
+		if target == p then continue end
+		local ally = target:IsA("Player") and self.round:IsActive(p) and self.round:IsActive(target)
+			and p:GetAttribute("TeamId") == target:GetAttribute("TeamId")
+		if not self:Enemy(p,target) and not (allowAlly and ally) then continue end
+		local other = U.root(target)
+		if other then
+			local delta = other.Position-root.Position
+			local flat = Vector3.new(delta.X,0,delta.Z)
+			local forward = Vector3.new(root.CFrame.LookVector.X,0,root.CFrame.LookVector.Z)
+			local facing = flat.Magnitude < 0.05 or (forward.Magnitude > 0.05 and forward.Unit:Dot(flat.Unit) > 0.15)
+			if delta.Magnitude <= range and facing and delta.Magnitude < bestDistance and self:Visible(root,other) then
+				best = target; bestDistance = delta.Magnitude
+			end
+		end
+	end
+	return best
+end
+function Combat:Knock(target, velocity, attacker, isRescue)
+	local root, hum = U.root(target); if not root or root.Anchored then return false end
+	local now = workspace:GetServerTimeNow()
+	if not isRescue then
+		if (target:GetAttribute("ShieldUntil") or 0) > now then
+			target:SetAttribute("ShieldUntil",0)
+			local shield = root.Parent:FindFirstChild("ArenaShield"); if shield then shield:Destroy() end
+			self.fx:FireAllClients("Block",root.Position); return false
+		end
+		if (target:GetAttribute("AnchorUntil") or 0) > now then velocity *= 0.28 end
+	end
+	-- Temporarily own the victim assembly so local character simulation cannot swallow the impulse.
+	local canSet = root:CanSetNetworkOwnership()
+	if canSet then root:SetNetworkOwner(nil) end
+	local token = (self.ownership[root] or 0)+1; self.ownership[root] = token
+	hum.PlatformStand = true
+	local v = root.AssemblyLinearVelocity
+	root.AssemblyLinearVelocity = Vector3.new(v.X*0.15,math.max(v.Y,0)*0.2,v.Z*0.15)+velocity
+	if target:IsA("Player") and attacker and not isRescue then
+		self.credit[target] = { player = attacker, time = os.clock() }
+	end
+	task.delay(Config.Combat.Recovery,function()
+		if self.ownership[root] ~= token then return end
+		self.ownership[root] = nil
+		if root.Parent and hum.Parent then
+			hum.PlatformStand = false
+			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+			local canReset = root:CanSetNetworkOwnership()
+			if canReset then
+				if target:IsA("Player") then root:SetNetworkOwnershipAuto() else root:SetNetworkOwner(nil) end
+			end
+		end
+	end)
+	self.fx:FireAllClients("Hit",root.Position,velocity)
+	return true
+end
+function Combat:Push(p, power, ram)
+	if not self:CanAct(p) or not self:Ready(p,"Push",Config.Combat.Cooldown) then return false end
+	local root = U.root(p); if not root then return false end
+	self.fx:FireClient(p,"Cooldown","Push",Config.Combat.Cooldown)
+	self.fx:FireAllClients("Swing",root.Position,root.CFrame.LookVector)
+	local target = self:Target(p, if ram then 11 else Config.Combat.Range, false)
+	if not target then self.fx:FireClient(p,"Toast","Miss • face someone within reach"); return true end
+	local other = U.root(target)
+	local delta = other.Position-root.Position
+	local flat = Vector3.new(delta.X,0,delta.Z)
+	local direction = if flat.Magnitude > 0.01 then flat.Unit else root.CFrame.LookVector
+	self:Knock(target,direction*(power or Config.Combat.Power)+Vector3.new(0,Config.Combat.Lift,0),p)
+	if ram then
+		self:Knock(p,-direction*24+Vector3.new(0,6,0),nil,true)
+	else
+		root:ApplyImpulse(-direction*4*root.AssemblyMass)
+	end
+	return true
+end
+function Combat:Grab(p)
+	if not self:CanAct(p) or not self:Ready(p,"Grab",Config.Combat.GrabCooldown) then return end
+	self.fx:FireClient(p,"Cooldown","Grab",Config.Combat.GrabCooldown)
+	local target = self:Target(p,Config.Combat.GrabRange,true)
+	if not target then self.fx:FireClient(p,"Toast","Grab missed • move closer"); return end
+	local root = U.root(p); local other = U.root(target)
+	local delta = root.Position-other.Position; local flat = Vector3.new(delta.X,0,delta.Z)
+	if flat.Magnitude < 0.1 then return end
+	local rescue = target:IsA("Player") and p:GetAttribute("TeamId") == target:GetAttribute("TeamId")
+	self:Knock(target,flat.Unit*32+Vector3.new(0,12,0),p,rescue)
+	root:ApplyImpulse(-flat.Unit*8*root.AssemblyMass)
+	self.fx:FireAllClients("Grab",root.Position,other.Position)
+end
+function Combat:Aim(p, aim)
+	local root = U.root(p); if not root then return nil end
+	if typeof(aim) ~= "Vector3" or not Rules.validNumber(aim.X) or not Rules.validNumber(aim.Y)
+		or not Rules.validNumber(aim.Z) or aim.Magnitude < 0.5 or aim.Magnitude > 1.5 then
+		return root.CFrame.LookVector
+	end
+	return aim.Unit
+end
+return Combat
