@@ -2,12 +2,12 @@
 local Players=game:GetService("Players")
 local ReplicatedStorage=game:GetService("ReplicatedStorage")
 local RunService=game:GetService("RunService")
-local Lighting=game:GetService("Lighting")
 local Config=require(ReplicatedStorage.Shared.Config)
 local Arena=require(script.ArenaService)
 local Round=require(script.RoundService)
 local Combat=require(script.PushService)
 local Items=require(script.ItemService)
+local Bots=require(script.BotService)
 
 -- Remove only the stock template floor/spawn; leave user-authored scenery alone.
 for _,name in {"Baseplate","SpawnLocation"} do
@@ -23,9 +23,6 @@ local function remote(name)
 	local event=Instance.new("RemoteEvent"); event.Name=name; event.Parent=folder; return event
 end
 local action=remote("Action"); local fx=remote("FX"); local state=remote("RoundState")
-Lighting.ClockTime=15; Lighting.Brightness=2
-Lighting.Ambient=Color3.fromRGB(110,108,124)
-Lighting.OutdoorAmbient=Color3.fromRGB(145,145,155)
 workspace:SetAttribute("Version",Config.Version)
 workspace:SetAttribute("Phase","Waiting")
 local arena=Arena.new(fx)
@@ -33,15 +30,15 @@ local round=Round.new(arena,state,fx)
 local combat=Combat.new(round,arena,fx)
 local items=Items.new(round,arena,combat,fx)
 round.combat=combat; round.items=items
+round.bots=Bots.new(round,arena,combat,items)
 Players.PlayerAdded:Connect(function(p) round:AddPlayer(p) end)
 Players.PlayerRemoving:Connect(function(p) round:RemovePlayer(p) end)
 for _,p in Players:GetPlayers() do round:AddPlayer(p) end
-action.OnServerEvent:Connect(function(p,kind,arg,extra)
+action.OnServerEvent:Connect(function(p,kind,arg)
 	if typeof(kind) ~= "string" or not combat:Ready(p,"Remote",.06) then return end
 	if kind == "Push" then combat:Push(p)
 	elseif kind == "Grab" then combat:Grab(p)
 	elseif kind == "UseItem" then items:Use(p,arg)
-	elseif kind == "Vote" then round:Vote(p,arg,extra)
 	elseif kind == "Snapshot" and combat:Ready(p,"Snapshot",1) then round:Broadcast()
 	end
 end)

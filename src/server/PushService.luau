@@ -1,5 +1,4 @@
 --!nonstrict
-local Players = game:GetService("Players")
 local Config = require(game:GetService("ReplicatedStorage").Shared.Config)
 local Rules = require(game:GetService("ReplicatedStorage").Shared.Rules)
 local U = require(script.Parent.Util)
@@ -20,10 +19,10 @@ function Combat:Forget(p)
 	self.times[p] = nil; self.credit[p] = nil
 end
 function Combat:CanAct(p)
-	return self.round:IsActive(p) or (p:GetAttribute("InRound") ~= true and U.root(p) ~= nil)
+	return self.round:IsActive(p) or (p:IsA("Player") and p:GetAttribute("InRound") ~= true and U.root(p) ~= nil)
 end
 function Combat:Enemy(a,b)
-	if b:IsA("Model") then return b:GetAttribute("Practice") == true end
+	if b:GetAttribute("Practice") then return a:IsA("Player") end
 	return self.round:IsActive(a) and self.round:IsActive(b)
 		and a:GetAttribute("TeamId") ~= b:GetAttribute("TeamId")
 end
@@ -34,12 +33,12 @@ function Combat:Visible(a,b)
 end
 function Combat:Target(p, range, allowAlly)
 	local root = U.root(p); if not root then return nil end
-	local targets = Players:GetPlayers()
+	local targets = self.round:Active()
 	for _, d in self.arena.dummies do table.insert(targets,d.model) end
 	local best, bestDistance = nil, math.huge
 	for _, target in targets do
 		if target == p then continue end
-		local ally = target:IsA("Player") and self.round:IsActive(p) and self.round:IsActive(target)
+		local ally = self.round:IsActive(p) and self.round:IsActive(target)
 			and p:GetAttribute("TeamId") == target:GetAttribute("TeamId")
 		if not self:Enemy(p,target) and not (allowAlly and ally) then continue end
 		local other = U.root(target)
@@ -73,7 +72,7 @@ function Combat:Knock(target, velocity, attacker, isRescue)
 	hum.PlatformStand = true
 	local v = root.AssemblyLinearVelocity
 	root.AssemblyLinearVelocity = Vector3.new(v.X*0.15,math.max(v.Y,0)*0.2,v.Z*0.15)+velocity
-	if target:IsA("Player") and attacker and not isRescue then
+	if attacker and not isRescue and self.round.alive[target] then
 		self.credit[target] = { player = attacker, time = os.clock() }
 	end
 	task.delay(Config.Combat.Recovery,function()
@@ -94,10 +93,11 @@ end
 function Combat:Push(p, power, ram)
 	if not self:CanAct(p) or not self:Ready(p,"Push",Config.Combat.Cooldown) then return false end
 	local root = U.root(p); if not root then return false end
-	self.fx:FireClient(p,"Cooldown","Push",Config.Combat.Cooldown)
+	p:SetAttribute("SwingUntil",workspace:GetServerTimeNow()+.24)
+	U.notify(self.fx,p,"Cooldown","Push",Config.Combat.Cooldown)
 	self.fx:FireAllClients("Swing",root.Position,root.CFrame.LookVector)
 	local target = self:Target(p, if ram then 11 else Config.Combat.Range, false)
-	if not target then self.fx:FireClient(p,"Toast","Miss • face someone within reach"); return true end
+	if not target then return true end
 	local other = U.root(target)
 	local delta = other.Position-root.Position
 	local flat = Vector3.new(delta.X,0,delta.Z)
@@ -112,13 +112,13 @@ function Combat:Push(p, power, ram)
 end
 function Combat:Grab(p)
 	if not self:CanAct(p) or not self:Ready(p,"Grab",Config.Combat.GrabCooldown) then return end
-	self.fx:FireClient(p,"Cooldown","Grab",Config.Combat.GrabCooldown)
+	U.notify(self.fx,p,"Cooldown","Grab",Config.Combat.GrabCooldown)
 	local target = self:Target(p,Config.Combat.GrabRange,true)
-	if not target then self.fx:FireClient(p,"Toast","Grab missed • move closer"); return end
+	if not target then return end
 	local root = U.root(p); local other = U.root(target)
 	local delta = root.Position-other.Position; local flat = Vector3.new(delta.X,0,delta.Z)
 	if flat.Magnitude < 0.1 then return end
-	local rescue = target:IsA("Player") and p:GetAttribute("TeamId") == target:GetAttribute("TeamId")
+	local rescue = self.round:IsActive(target) and p:GetAttribute("TeamId") == target:GetAttribute("TeamId")
 	self:Knock(target,flat.Unit*32+Vector3.new(0,12,0),p,rescue)
 	root:ApplyImpulse(-flat.Unit*8*root.AssemblyMass)
 	self.fx:FireAllClients("Grab",root.Position,other.Position)

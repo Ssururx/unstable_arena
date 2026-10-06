@@ -1,5 +1,14 @@
 --!nonstrict
 local Util = {}
+function Util.character(subject)
+	return if subject:IsA("Player") then subject.Character else subject
+end
+function Util.name(subject)
+	return if subject:IsA("Player") then subject.DisplayName else (subject:GetAttribute("DisplayName") or subject.Name)
+end
+function Util.notify(remote,subject,...)
+	if subject:IsA("Player") and subject.Parent then remote:FireClient(subject,...) end
+end
 function Util.part(parent, name, size, cf, color, material)
 	local p = Instance.new("Part")
 	p.Name = name; p.Size = size; p.CFrame = cf; p.Anchored = true
@@ -15,7 +24,7 @@ function Util.weld(a, b)
 	return w
 end
 function Util.root(subject)
-	local model = if subject:IsA("Player") then subject.Character else subject
+	local model = Util.character(subject)
 	if not model then return nil, nil end
 	local root = model:FindFirstChild("HumanoidRootPart")
 	local hum = model:FindFirstChildOfClass("Humanoid")

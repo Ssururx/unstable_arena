@@ -1,22 +1,20 @@
 --!strict
 return table.freeze({
-	Version = "0.2.0-playtest",
+	Version = "0.3.0-coliseum",
 	Arena = {
-		Center = Vector3.new(0, 42, 0), Radius = 30, TileSize = 10,
-		MaxTilt = 26, Response = 30, AngularSpeed = 3.8, TiltPerStud = 0.9,
-		LobbyRadius = 76, VoidY = 12,
+		Center = Vector3.new(0, 58, 0), Radius = 52, SlabCount = 38,
+		MaxTilt = 23, Response = 32, AngularSpeed = 3.8, TiltPerStud = 0.42,
+		LobbyRadius = 89, VoidY = 18, EliminationRadius = 65,
 	},
-	Round = { Intermission = 12, Countdown = 3, Duration = 85, Results = 5, MaxPlayers = 16 },
+	Round = { MapVote = 9, ModeVote = 10, Countdown = 3, Duration = 95, Results = 5, MaxPlayers = 16 },
+	Bots = { FillTo = 6, Maximum = 7, ThinkInterval = 0.22, WalkSpeed = 17, PushCooldown = 1.65 },
 	Combat = { Range = 9, Cooldown = 0.85, Power = 60, Lift = 15, Recovery = 0.38,
 		GrabRange = 7, GrabCooldown = 3.5 },
-	Slabs = { Grace = 7, DurabilityMin = 25, DurabilityMax = 37, WarningTime = 1.25 },
+	Slabs = { Grace = 9, DurabilityMin = 32, DurabilityMax = 46, WarningTime = 1.6 },
 	Maps = {
-		{ Id = "Coliseum", Name = "Roman Coliseum", Tag = "CRUMBLING STONE", Duration = 85,
-			Material = Enum.Material.Slate, Color = Color3.fromRGB(148, 132, 110),
-			Accent = Color3.fromRGB(243, 187, 89), Wave = 1.8 },
-		{ Id = "Amazon", Name = "Amazon Rapids", Tag = "RAFT • BOWS • FAST", Duration = 65,
-			Material = Enum.Material.WoodPlanks, Color = Color3.fromRGB(119, 79, 43),
-			Accent = Color3.fromRGB(74, 223, 161), Wave = 5.5 },
+		{ Id = "Coliseum", Name = "Roman Coliseum", Tag = "THE FRACTURED ARENA", Duration = 95,
+			Material = Enum.Material.Limestone, Color = Color3.fromRGB(151, 139, 116),
+			Accent = Color3.fromRGB(190, 146, 74), Wave = 2.4 },
 	},
 	Modes = { "FFA", "Duos", "Squads" },
 	TeamColors = {

@@ -2,6 +2,12 @@
   "name": "UnstableArena",
   "tree": {
     "$className": "DataModel",
+    "Lighting": {
+      "$properties": {
+        "LightingStyle": "Realistic",
+        "PrioritizeLightingQuality": true
+      }
+    },
     "ReplicatedStorage": {
       "Shared": {
         "$path": "src/shared"

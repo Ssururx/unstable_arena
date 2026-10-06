@@ -6,13 +6,13 @@ local UIS=game:GetService("UserInputService")
 local GuiService=game:GetService("GuiService")
 local TweenService=game:GetService("TweenService")
 local Debris=game:GetService("Debris")
+local CollectionService=game:GetService("CollectionService")
 local Config=require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
 local player=Players.LocalPlayer
 local remotes=ReplicatedStorage:WaitForChild("Remotes")
 local action=remotes:WaitForChild("Action")
 local fx=remotes:WaitForChild("FX")
-local state=remotes:WaitForChild("RoundState")
-local colors={bg=Color3.fromRGB(23,27,35),soft=Color3.fromRGB(43,49,61),text=Color3.fromRGB(247,240,222),gold=Color3.fromRGB(245,192,102)}
+local colors={bg=Color3.fromRGB(32,31,27),soft=Color3.fromRGB(62,58,49),text=Color3.fromRGB(242,231,210),gold=Color3.fromRGB(191,155,91)}
 local gui=Instance.new("ScreenGui"); gui.Name="UnstableArenaUI"; gui.ResetOnSpawn=false
 gui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling; gui.Parent=player:WaitForChild("PlayerGui")
 local scales={}
@@ -36,11 +36,12 @@ local function button(parent,text,size,pos,callback)
 	b.BorderSizePixel=0; b.Font=Enum.Font.GothamBold; b.TextSize=14; b.TextColor3=colors.text
 	b.Text=text; b.Parent=parent; roundCorner(b,8); b.Activated:Connect(callback); return b
 end
-local top=panel("Round",UDim2.fromOffset(450,85),UDim2.fromScale(.5,.02),Vector2.new(.5,0))
-local title=label(top,"UNSTABLE ARENA",UDim2.new(1,-20,0,28),UDim2.fromOffset(10,7),19)
-local subtitle=label(top,"Joining arena…",UDim2.new(1,-85,0,34),UDim2.fromOffset(12,39),13)
+local top=panel("Round",UDim2.fromOffset(390,68),UDim2.fromScale(.5,.02),Vector2.new(.5,0))
+top.BackgroundTransparency=.22
+local title=label(top,"ROMAN COLISEUM",UDim2.new(1,-75,0,26),UDim2.fromOffset(12,6),18)
+local subtitle=label(top,"",UDim2.new(1,-75,0,25),UDim2.fromOffset(12,34),12)
 subtitle.TextXAlignment=Enum.TextXAlignment.Left
-local timer=label(top,"",UDim2.fromOffset(65,38),UDim2.new(1,-75,0,37),30); timer.TextColor3=colors.gold
+local timer=label(top,"",UDim2.fromOffset(58,42),UDim2.new(1,-66,0,12),28); timer.TextColor3=colors.gold
 local stats=panel("SessionStats",UDim2.fromOffset(210,28),UDim2.fromScale(.02,.02),Vector2.zero)
 local statText=label(stats,"0 wins • 0 coins",UDim2.fromScale(1,1),UDim2.new(),12)
 local toastPanel=panel("Toast",UDim2.fromOffset(480,46),UDim2.fromScale(.5,.2),Vector2.new(.5,0))
@@ -49,22 +50,6 @@ local toastText=label(toastPanel,"",UDim2.new(1,-20,1,-8),UDim2.fromOffset(10,4)
 local toastUntil=0
 local function toast(message)
 	toastText.Text=message; toastUntil=os.clock()+3; toastPanel.Visible=true
-end
-local vote=panel("Vote",UDim2.fromOffset(540,213),UDim2.fromScale(.5,.5),Vector2.new(.5,.5))
-label(vote,"NEXT ARENA",UDim2.new(1,0,0,32),UDim2.fromOffset(0,8),18)
-local mapButtons={}; local modeButtons={}; local mapCounts={0,0}; local modeCounts={0,0,0}
-local selectedMap=nil; local selectedMode=nil
-for i,map in Config.Maps do
-	mapButtons[i]=button(vote,map.Name,UDim2.fromOffset(250,65),UDim2.fromOffset(15+(i-1)*260,48),function()
-		selectedMap=i; action:FireServer("Vote","map",i)
-	end)
-	mapButtons[i].TextWrapped=true
-end
-label(vote,"TEAM SIZE",UDim2.new(1,0,0,24),UDim2.fromOffset(0,119),12)
-for i,mode in Config.Modes do
-	modeButtons[i]=button(vote,mode,UDim2.fromOffset(160,42),UDim2.fromOffset(20+(i-1)*170,154),function()
-		selectedMode=i; action:FireServer("Vote","mode",i)
-	end)
 end
 local cooldown={}
 local following=nil; local firstPerson=false; local wantLock=false; local locked=false
@@ -94,14 +79,22 @@ local crosshair=label(gui,"+",UDim2.fromOffset(24,24),UDim2.new(.5,-12,.5,-12),2
 crosshair.TextTransparency=.15
 local lockPanel=panel("Lock",UDim2.fromOffset(190,32),UDim2.fromScale(.02,.97),Vector2.new(0,1))
 local lockButton=button(lockPanel,"SHIFT LOCK: OFF",UDim2.fromScale(1,1),UDim2.new(),function() wantLock=not wantLock end)
+lockPanel.BackgroundTransparency=1; lockButton.BackgroundTransparency=.35
+local controlHint=label(gui,"CLICK / E  PUSH     Q  GRAB     F  ITEM",UDim2.fromOffset(360,22),UDim2.new(.5,-180,1,-26),12)
 local spec=panel("Spectator",UDim2.fromOffset(450,88),UDim2.fromScale(.5,.82),Vector2.new(.5,1))
 local specTitle=label(spec,"WATCH FROM THE STANDS",UDim2.new(1,-12,0,26),UDim2.fromOffset(6,3),14)
+local function character(actor) return if actor:IsA("Player") then actor.Character else actor end
+local function actorName(actor) return if actor:IsA("Player") then actor.DisplayName else actor:GetAttribute("DisplayName") or actor.Name end
 local function subjects()
 	local list={}
 	for _,p in Players:GetPlayers() do
 		if p ~= player and p:GetAttribute("InRound") and p.Character and p.Character:FindFirstChildOfClass("Humanoid") then table.insert(list,p) end
 	end
-	table.sort(list,function(a,b) return a.UserId < b.UserId end)
+	for _,bot in CollectionService:GetTagged("ArenaBot") do
+		if bot:GetAttribute("InRound") and bot:FindFirstChildOfClass("Humanoid") then table.insert(list,bot) end
+	end
+	local function id(a) return if a:IsA("Player") then a.UserId else a:GetAttribute("ActorId") or 0 end
+	table.sort(list,function(a,b) return id(a)<id(b) end)
 	return list
 end
 local function restoreCamera()
@@ -132,26 +125,44 @@ UIS.InputBegan:Connect(function(input,processed)
 	end
 end)
 player.CharacterAdded:Connect(function() restoreCamera(); wantLock=false end)
-state.OnClientEvent:Connect(function(data)
-	mapCounts=data.maps or mapCounts; modeCounts=data.modes or modeCounts
-end)
 local effects=Instance.new("Folder"); effects.Name="ArenaLocalEffects"; effects.Parent=workspace
+local animatedBots={}
+local function registerBot(bot)
+	task.spawn(function()
+		local torso=bot:WaitForChild("Torso",5); if not torso then return end
+		local joints={}
+		for _,name in {"Left Hip","Right Hip","Left Shoulder","Right Shoulder"} do
+			local joint=torso:WaitForChild(name,5); if joint then joints[name]=joint end
+		end
+		if bot.Parent and CollectionService:HasTag(bot,"ArenaBot") then animatedBots[bot]=joints end
+	end)
+end
+for _,bot in CollectionService:GetTagged("ArenaBot") do registerBot(bot) end
+CollectionService:GetInstanceAddedSignal("ArenaBot"):Connect(registerBot)
+CollectionService:GetInstanceRemovedSignal("ArenaBot"):Connect(function(bot) animatedBots[bot]=nil end)
 local function effect(kind,a,b)
 	local camera=workspace.CurrentCamera
 	if typeof(a) ~= "Vector3" or not camera or (camera.CFrame.Position-a).Magnitude > 230 or #effects:GetChildren() >= 70 then return end
 	local part=Instance.new("Part"); part.Anchored=true; part.CanCollide=false; part.CanTouch=false; part.CanQuery=false
-	part.Material=Enum.Material.Neon; part.Color=colors.gold; part.Transparency=.25
+	part.Material=Enum.Material.SmoothPlastic; part.Color=colors.gold; part.Transparency=.3
 	if kind == "Arrow" or kind == "Grab" then
 		if typeof(b) ~= "Vector3" or (b-a).Magnitude < .01 then part:Destroy(); return end
 		part.Size=Vector3.new(.12,.12,(b-a).Magnitude); part.CFrame=CFrame.lookAt((a+b)/2,b)
-		part.Color=if kind == "Arrow" then Color3.fromRGB(211,137,255) else Color3.fromRGB(105,220,240)
+		part.Color=if kind == "Arrow" then Color3.fromRGB(217,195,141) else Color3.fromRGB(210,208,186)
 	else
-		part.Shape=Enum.PartType.Ball; part.Size=Vector3.one*1.3
+		part.Size=Vector3.one*.1
 		part.Position=if kind == "Swing" and typeof(b) == "Vector3" then a+b*3 else a
-		if typeof(b) == "Color3" then part.Color=b end
-		if kind == "Break" then part.Color=Color3.fromRGB(170,130,98) end
-		if kind == "Block" then part.Color=Color3.fromRGB(90,175,255) end
-		TweenService:Create(part,TweenInfo.new(.25),{Size=Vector3.one*(if kind == "Break" then 8 else 4)}):Play()
+		part.Transparency=1
+		local dust=Instance.new("ParticleEmitter")
+		dust.Texture="rbxasset://textures/particles/smoke_main.dds"
+		dust.Color=ColorSequence.new(if kind=="Block" then Color3.fromRGB(186,207,224) else Color3.fromRGB(153,137,109))
+		dust.Lifetime=NumberRange.new(.25,.6); dust.Speed=NumberRange.new(2,if kind=="Break" then 12 else 6)
+		dust.SpreadAngle=Vector2.new(180,180); dust.Rate=0; dust.LightInfluence=.85
+		dust.Size=NumberSequence.new({NumberSequenceKeypoint.new(0,.35),NumberSequenceKeypoint.new(1,if kind=="Break" then 4 else 1.5)})
+		dust.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,.45),NumberSequenceKeypoint.new(1,1)})
+		dust.Parent=part; part.Parent=effects
+		dust:Emit(if kind=="Break" then 18 elseif kind=="Crack" then 7 else 4)
+		Debris:AddItem(part,.8); return
 	end
 	part.Parent=effects
 	TweenService:Create(part,TweenInfo.new(.25),{Transparency=1}):Play(); Debris:AddItem(part,.3)
@@ -167,25 +178,14 @@ local function updateUI()
 	for _,s in scales do s.Scale=scale end
 	local phase=workspace:GetAttribute("Phase") or "Waiting"
 	local active=player:GetAttribute("InRound") == true
-	vote.Visible=phase == "Vote"
 	spec.Visible=phase == "Live" and not active
 	if following and not spec.Visible then restoreCamera() end
 	local seconds=math.max(0,math.ceil((workspace:GetAttribute("EndsAt") or 0)-workspace:GetServerTimeNow()))
 	timer.Text=if phase == "Waiting" then "—" else tostring(seconds)
-	title.Text=if phase == "Live" then (workspace:GetAttribute("MapName") or "UNSTABLE ARENA")
-		elseif phase == "Vote" then "CHOOSE THE NEXT ARENA" elseif phase == "Countdown" then "GET READY"
-		elseif phase == "Results" then "ROUND OVER" else "UNSTABLE ARENA"
+	title.Text=if phase == "Countdown" then "GET READY" elseif phase == "Results" then "ROUND OVER" else "ROMAN COLISEUM"
 	if phase == "Live" then
 		subtitle.Text=(workspace:GetAttribute("Mode") or "FFA").." • "..tostring(workspace:GetAttribute("Remaining") or 0).." remaining"
 	else subtitle.Text=workspace:GetAttribute("Message") or "" end
-	for i,b in mapButtons do
-		b.Text=Config.Maps[i].Name.."  ("..mapCounts[i]..")\n"..Config.Maps[i].Tag
-		b.BackgroundColor3=if selectedMap == i then Color3.fromRGB(107,77,37) else colors.soft
-	end
-	for i,b in modeButtons do
-		b.Text=Config.Modes[i].."  ("..modeCounts[i]..")"
-		b.BackgroundColor3=if selectedMode == i then Color3.fromRGB(107,77,37) else colors.soft
-	end
 	local id=player:GetAttribute("Item"); local def=Config.Items[id]
 	itemName.Text=if def then def.Name.." ×"..tostring(player:GetAttribute("ItemUses") or 1) else "EMPTY HANDS"
 	itemName.TextColor3=if def then def.Color else colors.text
@@ -193,7 +193,8 @@ local function updateUI()
 	if (player:GetAttribute("ShieldUntil") or 0) > now then itemHint.Text="SHIELD ACTIVE • blocks one hit"
 	elseif (player:GetAttribute("AnchorUntil") or 0) > now then itemHint.Text="ANCHORED • your slab is under extra stress"
 	else itemHint.Text=if def then def.Hint else "R / Y / tap a pickup • carry one item" end
-	inventory.Visible=active or phase == "Vote"
+	inventory.Visible=active and def~=nil
+	inventory.Position=UDim2.fromScale(.5,.93)
 	toastPanel.Visible=os.clock() < toastUntil
 	local statsFolder=player:FindFirstChild("leaderstats")
 	if statsFolder and statsFolder:FindFirstChild("Wins") and statsFolder:FindFirstChild("Coins") then
@@ -201,8 +202,12 @@ local function updateUI()
 	end
 	-- On narrow screens, avoid covering the main round banner.
 	stats.Position=if camera.ViewportSize.X < 1000 then UDim2.fromScale(.02,.17) else UDim2.fromScale(.02,.02)
-	stats.Visible=not toastPanel.Visible
-	actionPanel.Visible=not following and not vote.Visible and phase ~= "Countdown" and phase ~= "Results"
+	stats.Visible=active and not toastPanel.Visible and camera.ViewportSize.X>800
+	actionPanel.Visible=UIS.TouchEnabled and not following and phase~="Countdown" and phase~="Results"
+	controlHint.Visible=not UIS.TouchEnabled and active and not following
+	local pushWait=math.max(0,(cooldown.Push or 0)-os.clock())
+	controlHint.Text=if UIS.GamepadEnabled and not UIS.KeyboardEnabled then "R2  PUSH     X  GRAB     L2  ITEM"
+		elseif pushWait>0 then string.format("PUSH %.1fs     Q  GRAB     F  ITEM",pushWait) else "CLICK / E  PUSH     Q  GRAB     F  ITEM"
 	local texts=if UIS.TouchEnabled then {Push="PUSH",Grab="GRAB",UseItem="ITEM"}
 		elseif UIS.GamepadEnabled and not UIS.KeyboardEnabled then {Push="PUSH · R2",Grab="GRAB · X",UseItem="ITEM · L2"}
 		else {Push="PUSH\nE / Click",Grab="GRAB\nQ",UseItem="ITEM\nF"}
@@ -212,13 +217,12 @@ local function updateUI()
 		b.BackgroundColor3=if remaining > 0 then colors.bg else colors.soft
 	end
 	lockButton.Text=if locked then "SHIFT LOCK: ON" else "SHIFT LOCK: OFF"
-	lockPanel.Visible=UIS.MouseEnabled and not following and not vote.Visible
+	lockPanel.Visible=UIS.MouseEnabled and not following
 	crosshair.Visible=locked or (id == "Bow" and active and not following)
 	povButton.Text=if firstPerson then "POV: FIRST" else "POV: THIRD"
-	specTitle.Text=if following then "WATCHING "..following.DisplayName else "WATCH FROM THE STANDS"
+	specTitle.Text=if following then "WATCHING "..actorName(following) else "WATCH FROM THE STANDS"
 end
 workspace:GetAttributeChangedSignal("Phase"):Connect(function()
-	if workspace:GetAttribute("Phase") == "Vote" then selectedMap=nil; selectedMode=nil; mapCounts={0,0}; modeCounts={0,0,0} end
 	updateUI()
 end)
 local elapsed=0
@@ -226,7 +230,26 @@ RunService:BindToRenderStep("UnstableCamera",Enum.RenderPriority.Camera.Value+1,
 	local camera=workspace.CurrentCamera; if not camera then return end
 	local char=player.Character; local hum=char and char:FindFirstChildOfClass("Humanoid")
 	local root=char and char:FindFirstChild("HumanoidRootPart")
-	local canLock=wantLock and UIS.MouseEnabled and not following and not vote.Visible and not GuiService.MenuIsOpen and not UIS:GetFocusedTextBox() and hum and hum.Health > 0
+	for bot,joints in animatedBots do
+		local botRoot=bot:FindFirstChild("HumanoidRootPart")
+		local botHum=bot:FindFirstChildOfClass("Humanoid")
+		if botRoot and botHum then
+			local moving=botHum.MoveDirection.Magnitude
+			-- Animation is cosmetic and local; combat and movement stay server-owned.
+			local velocity=botRoot.AssemblyLinearVelocity
+			if moving<.1 then moving=math.clamp(Vector3.new(velocity.X,0,velocity.Z).Magnitude/17,0,1) end
+			local stride=math.sin(os.clock()*10+(bot:GetAttribute("ActorId") or 0))*.5*moving
+			if botHum.PlatformStand then stride=0 end
+			local swinging=(bot:GetAttribute("SwingUntil") or 0)>workspace:GetServerTimeNow()
+			for name,joint in joints do
+				local left=string.find(name,"Left")~=nil; local arm=string.find(name,"Shoulder")~=nil
+				local angle=stride*(if left then 1 else -1)*(if arm then -1 else 1)
+				if arm and swinging then angle=-1.1 end
+				joint.Transform=CFrame.Angles(angle,0,0)
+			end
+		end
+	end
+	local canLock=wantLock and UIS.MouseEnabled and not following and not GuiService.MenuIsOpen and not UIS:GetFocusedTextBox() and hum and hum.Health > 0
 	if canLock then
 		locked=true; UIS.MouseBehavior=Enum.MouseBehavior.LockCenter
 		hum.CameraOffset=Vector3.new(1.7,0,0); hum.AutoRotate=false
@@ -239,7 +262,7 @@ RunService:BindToRenderStep("UnstableCamera",Enum.RenderPriority.Camera.Value+1,
 		if hum then hum.CameraOffset=Vector3.zero; hum.AutoRotate=true end
 	end
 	if following then
-		local target=following.Character; local th=target and target:FindFirstChildOfClass("Humanoid")
+		local target=character(following); local th=target and target:FindFirstChildOfClass("Humanoid")
 		local head=target and target:FindFirstChild("Head")
 		if not following:GetAttribute("InRound") or not th or th.Health <= 0 then cycle(1)
 		elseif firstPerson and head then
@@ -249,4 +272,3 @@ RunService:BindToRenderStep("UnstableCamera",Enum.RenderPriority.Camera.Value+1,
 	elapsed+=dt; if elapsed >= .1 then elapsed=0; updateUI() end
 end)
 updateUI(); action:FireServer("Snapshot")
-toast("Welcome! Push with E or click • Shift locks the mouse")

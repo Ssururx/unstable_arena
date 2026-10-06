@@ -1,6 +1,11 @@
 --!strict
 -- Engine-independent rules; tested with the standalone Luau runner.
 local Rules = {}
+function Rules.botCount(humans:number,mode:string,fillTo:number,maximum:number):number
+	if humans <= 0 then return 0 end
+	local teamSize=if mode=="Squads" then 4 elseif mode=="Duos" then 2 else 1
+	return math.clamp(math.max(fillTo,teamSize*2)-humans,0,maximum)
+end
 function Rules.teamSize(mode: string): number
 	return if mode == "Duos" then 2 elseif mode == "Squads" then 4 else 1
 end

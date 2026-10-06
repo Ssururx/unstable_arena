@@ -1,0 +1,125 @@
+--!nonstrict
+local CollectionService=game:GetService("CollectionService")
+local Config=require(game:GetService("ReplicatedStorage").Shared.Config)
+local U=require(script.Parent.Util)
+local G=require(script.Parent.Geometry)
+local Bots={}; Bots.__index=Bots
+local names={"Cassius","Flavia","Aurelia","Marcus","Lucius","Octavia","Titus"}
+function Bots.new(round,arena,combat,items)
+	local folder=Instance.new("Folder"); folder.Name="ArenaBots"; folder.Parent=arena.world
+	return setmetatable({round=round,arena=arena,combat=combat,items=items,folder=folder,bots={},nextThink=0},Bots)
+end
+local function motor(parent,name,a,b,c0,c1)
+	local joint=Instance.new("Motor6D"); joint.Name=name; joint.Part0=a; joint.Part1=b
+	joint.C0=c0; joint.C1=c1; joint.Parent=parent; return joint
+end
+function Bots:Create(index)
+	local rig=Instance.new("Model"); rig.Name="Gladiator_"..index
+	rig.ModelStreamingMode=Enum.ModelStreamingMode.Atomic
+	rig:SetAttribute("DisplayName",names[index] or "Gladiator"); rig:SetAttribute("Bot",true)
+	rig:SetAttribute("ActorId",1000000+index)
+	local at=CFrame.new(0,75,0)
+	local skin=({Color3.fromRGB(136,94,65),Color3.fromRGB(185,134,94),Color3.fromRGB(92,63,42)})[(index-1)%3+1]
+	local tunic=({Color3.fromRGB(117,49,40),Color3.fromRGB(71,85,84),Color3.fromRGB(113,95,60)})[(index-1)%3+1]
+	local function limb(name,size,offset,color)
+		local p=U.part(rig,name,size,at*offset,color,Enum.Material.SmoothPlastic)
+		p.Anchored=false; p.CanCollide=false; p.CanTouch=false; return p
+	end
+	local root=limb("HumanoidRootPart",Vector3.new(2,2,1),CFrame.identity,skin); root.Transparency=1; root.RootPriority=100
+	local torso=limb("Torso",Vector3.new(2,2,1),CFrame.identity,tunic); torso.CanCollide=true
+	local head=limb("Head",Vector3.new(2,1,1),CFrame.new(0,1.5,0),skin)
+	local mesh=Instance.new("SpecialMesh"); mesh.MeshType=Enum.MeshType.Head; mesh.Scale=Vector3.new(1.1,1.1,1.1); mesh.Parent=head
+	for _,side in {-1,1} do
+		local eye=U.part(rig,"Eye",Vector3.new(.15,.12,.045),head.CFrame*CFrame.new(side*.32,.03,-.54),Color3.fromRGB(33,29,25),Enum.Material.SmoothPlastic)
+		eye.CanCollide=false; eye.CanQuery=false; eye.Massless=true; U.weld(head,eye)
+	end
+	motor(root,"RootJoint",root,torso,CFrame.identity,CFrame.identity)
+	motor(torso,"Neck",torso,head,CFrame.new(0,1,0),CFrame.new(0,-.5,0))
+	for _,side in {-1,1} do
+		local word=if side<0 then "Left" else "Right"
+		local arm=limb(word.." Arm",Vector3.new(1,2,1),CFrame.new(side*1.5,0,0),skin)
+		local leg=limb(word.." Leg",Vector3.new(1,2,1),CFrame.new(side*.5,-2,0),Color3.fromRGB(89,62,43))
+		motor(torso,word.." Shoulder",torso,arm,CFrame.new(side,.5,0),CFrame.new(-side*.5,.5,0))
+		motor(torso,word.." Hip",torso,leg,CFrame.new(side*.5,-1,0),CFrame.new(0,1,0))
+	end
+	local helmet=G.cylinder(rig,"BronzeHelmet",.76,.55,at*CFrame.new(0,1.9,0),Color3.fromRGB(130,105,63),Enum.Material.Metal)
+	helmet.CanCollide=false; helmet.CanQuery=false; helmet.Massless=true; U.weld(head,helmet)
+	local crest=U.part(rig,"HelmetCrest",Vector3.new(.22,.65,1.3),at*CFrame.new(0,2.45,0),tunic,Enum.Material.Fabric)
+	crest.CanCollide=false; crest.CanQuery=false; crest.Massless=true; U.weld(head,crest)
+	local belt=U.part(rig,"LeatherBelt",Vector3.new(2.06,.28,1.05),at*CFrame.new(0,-.68,0),Color3.fromRGB(62,43,32),Enum.Material.Fabric)
+	belt.CanCollide=false; belt.CanQuery=false; belt.Massless=true; U.weld(torso,belt)
+	local humanoid=Instance.new("Humanoid"); humanoid.DisplayName=names[index].." · NPC"
+	humanoid.DisplayDistanceType=Enum.HumanoidDisplayDistanceType.Viewer; humanoid.NameDisplayDistance=35
+	humanoid.HealthDisplayType=Enum.HumanoidHealthDisplayType.AlwaysOff; humanoid.BreakJointsOnDeath=false
+	humanoid.WalkSpeed=Config.Bots.WalkSpeed; humanoid.UseJumpPower=true; humanoid.JumpPower=45; humanoid.HipHeight=0
+	humanoid.Parent=rig; rig.PrimaryPart=root; rig.Parent=self.folder
+	root:SetNetworkOwner(nil); CollectionService:AddTag(rig,"ArenaBot")
+	table.insert(self.bots,{model=rig,nextPush=os.clock()+2+math.random(),nextJump=0,nextItem=0})
+	humanoid.Died:Connect(function() self.round:Eliminate(rig) end)
+	return rig
+end
+function Bots:Clear()
+	for _,bot in self.bots do self.combat:Forget(bot.model); bot.model:Destroy() end
+	table.clear(self.bots); self.nextThink=0
+end
+function Bots:Step()
+	if os.clock()<self.nextThink then return end
+	self.nextThink=os.clock()+Config.Bots.ThinkInterval
+	local active=self.round:Active()
+	for _,bot in self.bots do
+		local actor=bot.model
+		if not self.round:IsActive(actor) then continue end
+		local root,hum=U.root(actor)
+		if not root or hum.PlatformStand or root.Anchored then continue end
+		local target,distance=nil,math.huge
+		for _,other in active do
+			if other==actor or not self.combat:Enemy(actor,other) then continue end
+			local otherRoot=U.root(other)
+			local d=(otherRoot.Position-root.Position).Magnitude
+			if d<distance then target=otherRoot; distance=d end
+		end
+		local under=self.arena:Under(root)
+		local desired=target and target.Position or Config.Arena.Center
+		if not under or under.stress/under.durability>.72 then
+			local best=math.huge
+			for _,slab in self.arena.slabs do
+				if slab.broken then continue end
+				local score=(slab.part.Position-root.Position).Magnitude+slab.stress/slab.durability*40
+				if score<best then best=score; desired=slab.part.Position end
+			end
+		end
+		local goal=Vector3.new(desired.X-root.Position.X,0,desired.Z-root.Position.Z)
+		if goal.Magnitude<.1 then goal=Vector3.zAxis end
+		goal=goal.Unit
+		-- Local steering samples actual intact stones, not a stale navmesh on a moving plate.
+		local heading=nil; local score=-math.huge; local jump=false
+		for i=0,11 do
+			local a=i/12*math.pi*2
+			local dir=Vector3.new(math.sin(a),0,math.cos(a))
+			local near=self.arena:GroundAt(root.Position+dir*4+Vector3.new(0,4,0),18)
+			local far=self.arena:GroundAt(root.Position+dir*9+Vector3.new(0,6,0),24)
+			if not near or not far then continue end
+			local value=dir:Dot(goal)*3-far.stress/far.durability*2
+			if value>score then score=value; heading=dir end
+		end
+		if not heading and os.clock()>bot.nextJump then
+			local landing=self.arena:GroundAt(root.Position+goal*10+Vector3.new(0,6,0),22)
+			if landing then heading=goal; jump=true; bot.nextJump=os.clock()+2.5 end
+		end
+		hum:Move(heading or Vector3.zero,false)
+		if jump then hum.Jump=true end
+		if target and distance<=8 and os.clock()>bot.nextPush then
+			bot.nextPush=os.clock()+Config.Bots.PushCooldown+math.random()*.5
+			local look=Vector3.new(target.Position.X,root.Position.Y,target.Position.Z)
+			if (look-root.Position).Magnitude>.1 then root.CFrame=CFrame.lookAt(root.Position,look) end
+			if math.random()<.78 then self.combat:Push(actor) else self.combat:Grab(actor) end
+		end
+		if under and not actor:GetAttribute("Item") and under.pickup then self.items:Pickup(actor,under,under.pickup,under.pickup:GetAttribute("ItemId")) end
+		if actor:GetAttribute("Item") and os.clock()>bot.nextItem then
+			bot.nextItem=os.clock()+1.2+math.random()
+			local id=actor:GetAttribute("Item")
+			if id~="Ram" or distance<9 then self.items:Use(actor,if target then (target.Position-root.Position).Unit else goal) end
+		end
+	end
+end
+return Bots
