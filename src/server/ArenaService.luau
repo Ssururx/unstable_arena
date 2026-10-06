@@ -200,7 +200,9 @@ function ArenaService:GetSpawnCFrames(count: number): { CFrame }
 	for index = 1, count do
 		local angle = ((index - 1) / math.max(count, 1)) * math.pi * 2
 		local offset = Vector3.new(math.cos(angle) * radius, 6, math.sin(angle) * radius)
-		local position = Config.Arena.Center + offset\n\t\tlocal lookTarget = Vector3.new(Config.Arena.Center.X, position.Y, Config.Arena.Center.Z)\n\t\ttable.insert(results, CFrame.lookAt(position, lookTarget))
+		local position = Config.Arena.Center + offset
+		local lookTarget = Vector3.new(Config.Arena.Center.X, position.Y, Config.Arena.Center.Z)
+		table.insert(results, CFrame.lookAt(position, lookTarget))
 	end
 	return results
 end
