@@ -22,7 +22,7 @@ function Rules.shouldEnd(teamIds: { number }, initialTeams: number): boolean
 end
 function Rules.stressRate(weight: number, tilt: number, age: number, duration: number): number
 	local urgency = math.clamp((age / duration - 0.48) / 0.52, 0, 1)
-	return 0.10 + tilt * 0.25 + weight * 0.85 + math.max(0, weight - 1) * 0.6 + urgency * 5.5
+	return 0.09 + tilt * 0.20 + weight * 0.65 + math.max(0, weight - 1) * 0.45 + urgency * 2.4
 end
 function Rules.limitTilt(x: number, z: number, limit: number): (number, number)
 	local length = math.sqrt(x * x + z * z)
