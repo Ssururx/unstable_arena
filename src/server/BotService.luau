@@ -145,7 +145,7 @@ function Bots:Step()
 			if goodPush or math.random()<.72 then self.combat:Push(actor) else self.combat:Grab(actor) end
 		end
 
-		if under and not actor:GetAttribute("Item") and under.pickup then
+		if under and self.items:FirstEmpty(actor) and under.pickup then
 			self.items:Pickup(actor,under,under.pickup,under.pickup:GetAttribute("ItemId"))
 		end
 		if actor:GetAttribute("Item") and os.clock()>bot.nextItem then
