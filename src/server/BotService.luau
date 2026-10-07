@@ -71,54 +71,88 @@ function Bots:Step()
 		if not self.round:IsActive(actor) then continue end
 		local root,hum=U.root(actor)
 		if not root or hum.PlatformStand or root.Anchored then continue end
+
 		local target,distance=nil,math.huge
+		local selfRadius=Vector3.new(root.Position.X-Config.Arena.Center.X,0,root.Position.Z-Config.Arena.Center.Z).Magnitude
 		for _,other in active do
 			if other==actor or not self.combat:Enemy(actor,other) then continue end
 			local otherRoot=U.root(other)
+			if not otherRoot then continue end
 			local d=(otherRoot.Position-root.Position).Magnitude
 			if d<distance then target=otherRoot; distance=d end
 		end
+
 		local under=self.arena:Under(root)
 		local desired=target and target.Position or Config.Arena.Center
-		if not under or under.stress/under.durability>.72 then
+		local targetRadius=target and Vector3.new(target.Position.X-Config.Arena.Center.X,0,target.Position.Z-Config.Arena.Center.Z).Magnitude or 0
+		local danger=selfRadius>Config.Arena.Radius*.79 or not under or (under and under.stress/under.durability>.70)
+
+		if danger then
+			-- Recover toward a healthier inner slab instead of blindly chasing over an edge.
 			local best=math.huge
 			for _,slab in self.arena.slabs do
 				if slab.broken then continue end
-				local score=(slab.part.Position-root.Position).Magnitude+slab.stress/slab.durability*40
+				local radial=Vector3.new(slab.part.Position.X-Config.Arena.Center.X,0,slab.part.Position.Z-Config.Arena.Center.Z).Magnitude
+				if radial>Config.Arena.Radius*.70 then continue end
+				local score=(slab.part.Position-root.Position).Magnitude+slab.stress/slab.durability*52+radial*.08
 				if score<best then best=score; desired=slab.part.Position end
 			end
+		elseif target then
+			local toTarget=Vector3.new(target.Position.X-root.Position.X,0,target.Position.Z-root.Position.Z)
+			local radialOut=Vector3.new(target.Position.X-Config.Arena.Center.X,0,target.Position.Z-Config.Arena.Center.Z)
+			-- When an opponent is near the rim, approach from the inside so pushes send them outward.
+			if targetRadius>Config.Arena.Radius*.68 and radialOut.Magnitude>.1 then
+				desired=target.Position-radialOut.Unit*6
+			elseif distance<13 and toTarget.Magnitude>.1 then
+				-- Small side-step keeps bots from forming a single robotic line.
+				local side=Vector3.new(-toTarget.Z,0,toTarget.X).Unit
+				local sign=if (bot.model:GetAttribute("ActorId") or 0)%2==0 then 1 else -1
+				desired=target.Position+side*sign*3.5
+			end
 		end
+
 		local goal=Vector3.new(desired.X-root.Position.X,0,desired.Z-root.Position.Z)
 		if goal.Magnitude<.1 then goal=Vector3.zAxis end
 		goal=goal.Unit
-		-- Local steering samples actual intact stones, not a stale navmesh on a moving plate.
+
 		local heading=nil; local score=-math.huge; local jump=false
-		for i=0,11 do
-			local a=i/12*math.pi*2
+		for i=0,15 do
+			local a=i/16*math.pi*2
 			local dir=Vector3.new(math.sin(a),0,math.cos(a))
-			local near=self.arena:GroundAt(root.Position+dir*4+Vector3.new(0,4,0),18)
-			local far=self.arena:GroundAt(root.Position+dir*9+Vector3.new(0,6,0),24)
+			local near=self.arena:GroundAt(root.Position+dir*4+Vector3.new(0,5,0),22)
+			local far=self.arena:GroundAt(root.Position+dir*10+Vector3.new(0,7,0),28)
 			if not near or not far then continue end
-			local value=dir:Dot(goal)*3-far.stress/far.durability*2
+			local future=root.Position+dir*10
+			local futureRadius=Vector3.new(future.X-Config.Arena.Center.X,0,future.Z-Config.Arena.Center.Z).Magnitude
+			local edgePenalty=math.max(0,(futureRadius-Config.Arena.Radius*.72)/(Config.Arena.Radius*.2))*5
+			local value=dir:Dot(goal)*3.5-far.stress/far.durability*2.6-edgePenalty
 			if value>score then score=value; heading=dir end
 		end
+
 		if not heading and os.clock()>bot.nextJump then
-			local landing=self.arena:GroundAt(root.Position+goal*10+Vector3.new(0,6,0),22)
-			if landing then heading=goal; jump=true; bot.nextJump=os.clock()+2.5 end
+			local landing=self.arena:GroundAt(root.Position+goal*10+Vector3.new(0,7,0),28)
+			if landing then heading=goal; jump=true; bot.nextJump=os.clock()+2.2 end
 		end
 		hum:Move(heading or Vector3.zero,false)
 		if jump then hum.Jump=true end
-		if target and distance<=8 and os.clock()>bot.nextPush then
-			bot.nextPush=os.clock()+Config.Bots.PushCooldown+math.random()*.5
+
+		if target and distance<=Config.Combat.Range and os.clock()>bot.nextPush then
+			local targetOut=Vector3.new(target.Position.X-Config.Arena.Center.X,0,target.Position.Z-Config.Arena.Center.Z)
 			local look=Vector3.new(target.Position.X,root.Position.Y,target.Position.Z)
 			if (look-root.Position).Magnitude>.1 then root.CFrame=CFrame.lookAt(root.Position,look) end
-			if math.random()<.78 then self.combat:Push(actor) else self.combat:Grab(actor) end
+			local goodPush=targetOut.Magnitude>Config.Arena.Radius*.62
+			bot.nextPush=os.clock()+Config.Bots.PushCooldown+math.random()*.45
+			if goodPush or math.random()<.72 then self.combat:Push(actor) else self.combat:Grab(actor) end
 		end
-		if under and not actor:GetAttribute("Item") and under.pickup then self.items:Pickup(actor,under,under.pickup,under.pickup:GetAttribute("ItemId")) end
+
+		if under and not actor:GetAttribute("Item") and under.pickup then
+			self.items:Pickup(actor,under,under.pickup,under.pickup:GetAttribute("ItemId"))
+		end
 		if actor:GetAttribute("Item") and os.clock()>bot.nextItem then
-			bot.nextItem=os.clock()+1.2+math.random()
+			bot.nextItem=os.clock()+.85+math.random()*.8
 			local id=actor:GetAttribute("Item")
-			if id~="Ram" or distance<9 then self.items:Use(actor,if target then (target.Position-root.Position).Unit else goal) end
+			local useNow=id~="Ram" or distance<10
+			if useNow then self.items:Use(actor,if target then (target.Position-root.Position).Unit else goal) end
 		end
 	end
 end
