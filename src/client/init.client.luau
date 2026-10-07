@@ -140,6 +140,57 @@ end
 for _,bot in CollectionService:GetTagged("ArenaBot") do registerBot(bot) end
 CollectionService:GetInstanceAddedSignal("ArenaBot"):Connect(registerBot)
 CollectionService:GetInstanceRemovedSignal("ArenaBot"):Connect(function(bot) animatedBots[bot]=nil end)
+
+local playerRig={character=nil,joints={}}
+local function playerJoints()
+	local char=player.Character
+	if char~=playerRig.character then
+		playerRig.character=char
+		playerRig.joints={}
+		if char then
+			for _,d in char:GetDescendants() do
+				if d:IsA("Motor6D") then
+					local n=string.lower(d.Name)
+					if string.find(n,"shoulder") or string.find(n,"waist") or string.find(n,"rootjoint") then
+						playerRig.joints[d.Name]=d
+					end
+				end
+			end
+		end
+	end
+	return playerRig.joints
+end
+
+local function actionPose(joints,actor,walkAmount,phase)
+	local now=workspace:GetServerTimeNow()
+	local swinging=(actor:GetAttribute("SwingUntil") or 0)>now
+	local grabbing=(actor:GetAttribute("GrabUntil") or 0)>now
+	local picking=(actor:GetAttribute("PickupUntil") or 0)>now
+	local using=(actor:GetAttribute("ItemActionUntil") or 0)>now
+	for name,joint in joints do
+		local lower=string.lower(name)
+		local left=string.find(lower,"left")~=nil
+		local shoulder=string.find(lower,"shoulder")~=nil
+		local waist=string.find(lower,"waist")~=nil or string.find(lower,"rootjoint")~=nil
+		local target=CFrame.identity
+		if shoulder then
+			local stride=math.sin(phase)*(if left then 1 else -1)*.34*walkAmount
+			target=CFrame.Angles(stride,0,0)
+			if swinging then
+				if left then target=CFrame.Angles(-.35,0,-.18) else target=CFrame.Angles(-1.28,0,.12) end
+			elseif grabbing then
+				target=CFrame.Angles(-1.02,0,if left then -.18 else .18)
+			elseif picking then
+				target=CFrame.Angles(-.82,0,if left then -.12 else .12)
+			elseif using then
+				target=CFrame.Angles(if left then -.55 else -1.0,0,if left then -.08 else .1)
+			end
+		elseif waist and (swinging or grabbing or picking or using) then
+			target=CFrame.Angles(if picking then .13 else -.08,0,if swinging then -.12 else 0)
+		end
+		joint.Transform=joint.Transform:Lerp(target,.28)
+	end
+end
 local function effect(kind,a,b)
 	local camera=workspace.CurrentCamera
 	if typeof(a) ~= "Vector3" or not camera or (camera.CFrame.Position-a).Magnitude > 230 or #effects:GetChildren() >= 70 then return end
@@ -230,6 +281,10 @@ RunService:BindToRenderStep("UnstableCamera",Enum.RenderPriority.Camera.Value+1,
 	local camera=workspace.CurrentCamera; if not camera then return end
 	local char=player.Character; local hum=char and char:FindFirstChildOfClass("Humanoid")
 	local root=char and char:FindFirstChild("HumanoidRootPart")
+	if hum and root then
+		local speed=Vector3.new(root.AssemblyLinearVelocity.X,0,root.AssemblyLinearVelocity.Z).Magnitude
+		actionPose(playerJoints(),player,math.clamp(speed/20,0,1),os.clock()*10)
+	end
 	for bot,joints in animatedBots do
 		local botRoot=bot:FindFirstChild("HumanoidRootPart")
 		local botHum=bot:FindFirstChildOfClass("Humanoid")
@@ -240,13 +295,7 @@ RunService:BindToRenderStep("UnstableCamera",Enum.RenderPriority.Camera.Value+1,
 			if moving<.1 then moving=math.clamp(Vector3.new(velocity.X,0,velocity.Z).Magnitude/17,0,1) end
 			local stride=math.sin(os.clock()*10+(bot:GetAttribute("ActorId") or 0))*.5*moving
 			if botHum.PlatformStand then stride=0 end
-			local swinging=(bot:GetAttribute("SwingUntil") or 0)>workspace:GetServerTimeNow()
-			for name,joint in joints do
-				local left=string.find(name,"Left")~=nil; local arm=string.find(name,"Shoulder")~=nil
-				local angle=stride*(if left then 1 else -1)*(if arm then -1 else 1)
-				if arm and swinging then angle=-1.1 end
-				joint.Transform=CFrame.Angles(angle,0,0)
-			end
+			actionPose(joints,bot,moving,os.clock()*10+(bot:GetAttribute("ActorId") or 0))
 		end
 	end
 	local canLock=wantLock and UIS.MouseEnabled and not following and not GuiService.MenuIsOpen and not UIS:GetFocusedTextBox() and hum and hum.Health > 0
