@@ -127,7 +127,10 @@ function Arena:ApplySlopePhysics(active)
 	for _,actor in active do
 		local _,hum=U.root(actor)
 		if hum and not hum.PlatformStand then
-			hum.WalkSpeed=if actor:GetAttribute("Bot") then Config.Bots.WalkSpeed else 20
+			local speed=if actor:GetAttribute("Bot") then Config.Bots.WalkSpeed else Config.Movement.WalkSpeed
+			if actor:GetAttribute("Sprinting") then speed=Config.Movement.SprintSpeed end
+			if (actor:GetAttribute("AdrenalineUntil") or 0)>workspace:GetServerTimeNow() then speed=Config.Movement.AdrenalineSpeed end
+			hum.WalkSpeed=speed
 		end
 	end
 
@@ -193,9 +196,14 @@ function Arena:Step(dt,active)
 			local offset=s.part.Position-Config.Arena.Center; tx+=offset.X*s.extraWeight; tz+=offset.Z*s.extraWeight
 			weights[s]=(weights[s] or 0)+s.extraWeight
 		end
+		if not s.broken and os.clock()<(s.hazardWeightUntil or 0) then
+			local hw=s.hazardWeight or 0
+			local offset=s.part.Position-Config.Arena.Center; tx+=offset.X*hw; tz+=offset.Z*hw
+			weights[s]=(weights[s] or 0)+hw
+		end
 	end
-	local intensity=math.clamp(self.age/(self.map.Duration*.72),0,1)
-	local chaos=1+intensity*.55
+	local intensity=math.clamp(self.age/(self.map.Duration*.78),0,1)
+	local chaos=1+intensity*.24
 	local pitch,roll=Rules.limitTilt(
 		tz*Config.Arena.TiltPerStud*chaos+math.sin(self.age*1.4)*self.map.Wave*chaos,
 		-tx*Config.Arena.TiltPerStud*chaos+math.sin(self.age*.9+1)*self.map.Wave*chaos,
@@ -220,6 +228,15 @@ function Arena:Step(dt,active)
 		if fraction>=1 and s.warningAt and self.age-s.warningAt>=Config.Slabs.WarningTime then self:Break(s) end
 	end
 end
+function Arena:AddHazardWeight(position,amount,duration)
+	local slab=self:GroundAt(position+Vector3.new(0,14,0),30)
+	if slab then
+		slab.hazardWeight=math.max(slab.hazardWeight or 0,amount or 1)
+		slab.hazardWeightUntil=os.clock()+(duration or 2)
+	end
+	return slab
+end
+
 function Arena:SpawnPoints(count)
 	local used={}; local points={}
 	for i=1,count do
