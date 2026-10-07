@@ -40,12 +40,14 @@ Players.PlayerAdded:Connect(function(p) round:AddPlayer(p) end)
 Players.PlayerRemoving:Connect(function(p) round:RemovePlayer(p) end)
 for _,p in Players:GetPlayers() do round:AddPlayer(p) end
 action.OnServerEvent:Connect(function(p,kind,arg)
-	if typeof(kind) ~= "string" or not combat:Ready(p,"Remote",.06) then return end
+	if typeof(kind)~="string" then return end
+	if kind=="Sprint" then movement:Sprint(p,arg==true); return end
+	if not combat:Ready(p,"Remote",.04) then return end
 	if kind == "Push" then combat:Push(p)
 	elseif kind == "Grab" then combat:Grab(p)
 	elseif kind == "UseItem" then items:Use(p,arg)
 	elseif kind == "SelectSlot" then items:Select(p,arg)
-	elseif kind == "Sprint" then movement:Sprint(p,arg==true)
+
 	elseif kind == "Dash" then movement:Dash(p,arg)
 	elseif kind == "Slide" then movement:Slide(p,arg)
 	elseif kind == "Adrenaline" then movement:Adrenaline(p)
