@@ -24,6 +24,7 @@ function Hazards:Reset()
 	for _,child in self.folder:GetChildren() do child:Destroy() end
 	workspace:SetAttribute("Hazard","")
 	workspace:SetAttribute("HazardEndsAt",0)
+	workspace:SetAttribute("HazardActiveAt",0)
 end
 
 function Hazards:Choose()
@@ -44,6 +45,7 @@ function Hazards:Begin(kind)
 	}
 	self.lastType=kind
 	workspace:SetAttribute("Hazard",kind)
+	workspace:SetAttribute("HazardActiveAt",workspace:GetServerTimeNow()+Config.Hazards.Warning)
 	workspace:SetAttribute("HazardEndsAt",workspace:GetServerTimeNow()+Config.Hazards.Warning+duration)
 	local message=if kind=="Meteor"
 		then "⚠ METEOR SHOWER IN "..Config.Hazards.Warning.."s · WATCH THE GROUND"
@@ -61,6 +63,7 @@ function Hazards:Finish()
 	self.current=nil
 	workspace:SetAttribute("Hazard","")
 	workspace:SetAttribute("HazardEndsAt",0)
+	workspace:SetAttribute("HazardActiveAt",0)
 	self.nextAt=os.clock()+self.rng:NextNumber(Config.Hazards.MinGap,Config.Hazards.MaxGap)
 end
 
@@ -165,11 +168,17 @@ function Hazards:StepLions()
 		if flat.Magnitude>.1 then
 			local dir=flat.Unit
 			local ahead=self.arena:GroundAt(root.Position+dir*7+Vector3.new(0,8,0),26)
-			if ahead then hum:Move(dir,false) else
+			if ahead then
+				hum:Move(dir,false)
+				local v=root.AssemblyLinearVelocity
+				root.AssemblyLinearVelocity=Vector3.new(dir.X*21,v.Y,dir.Z*21)
+			else
 				local inward=Vector3.new(Config.Arena.Center.X-root.Position.X,0,Config.Arena.Center.Z-root.Position.Z)
-				hum:Move(if inward.Magnitude>.1 then inward.Unit else Vector3.zero,false)
+				local safe=if inward.Magnitude>.1 then inward.Unit else Vector3.zero
+				hum:Move(safe,false)
+				local v=root.AssemblyLinearVelocity
+				root.AssemblyLinearVelocity=Vector3.new(safe.X*18,v.Y,safe.Z*18)
 			end
-			root.CFrame=CFrame.lookAt(root.Position,root.Position+dir)
 		end
 		if distance<5.2 and os.clock()>lion.nextHit then
 			lion.nextHit=os.clock()+2
