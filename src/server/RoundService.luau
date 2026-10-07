@@ -103,6 +103,7 @@ function Round:AddPlayer(p)
 		local root=char:WaitForChild("HumanoidRootPart",10); local hum=char:WaitForChild("Humanoid",10)
 		if not root or not hum or p.Character~=char then return end
 		if self.alive[p] then self:Eliminate(p,"ELIMINATED") end
+		if self.movement then self.movement:Clear(p) end
 		root.Anchored=false; char:PivotTo(self.arena:LobbyCFrame(p.UserId%5))
 		hum.WalkSpeed=20; hum.UseJumpPower=true; hum.JumpPower=45
 		local force=char:FindFirstChildOfClass("ForceField"); if force then force:Destroy() end
@@ -113,12 +114,15 @@ function Round:AddPlayer(p)
 end
 function Round:RemovePlayer(p)
 	self:Eliminate(p); self.votes[p]=nil; self.padDwell[p]=nil; self.combat:Forget(p)
+	if self.movement then self.movement:Clear(p) end
 end
 function Round:Cleanup()
 	if self.bots then self.bots:Clear() end
+	if self.hazards then self.hazards:Reset() end
 	for _,p in Players:GetPlayers() do
 		p:SetAttribute("InRound",false); p:SetAttribute("TeamId",nil)
 		p:SetAttribute("Selectedmap",nil); p:SetAttribute("Selectedmode",nil)
+		if self.movement then self.movement:Clear(p) end
 		local root,hum=U.root(p)
 		if root then
 			root.Anchored=false; hum.PlatformStand=false; hum.AutoRotate=true
@@ -159,6 +163,7 @@ function Round:Cycle()
 		local team=Rules.teamFor(i,Rules.teamSize(mode))
 		actor:SetAttribute("TeamId",team); actor:SetAttribute("InRound",true)
 		self.alive[actor]=true; self.combat.credit[actor]=nil; self.items:Clear(actor)
+		actor:SetAttribute("Adrenaline",0); actor:SetAttribute("AdrenalineUntil",0); actor:SetAttribute("Sprinting",false)
 		hum.PlatformStand=false; root.AssemblyLinearVelocity=Vector3.zero; root.AssemblyAngularVelocity=Vector3.zero
 		local char=U.character(actor); char:PivotTo(points[i]); root.Anchored=true
 		if mode~="FFA" then
@@ -174,7 +179,8 @@ function Round:Cycle()
 		if root then root.Anchored=false; if actor:GetAttribute("Bot") then root:SetNetworkOwner(nil) end end
 	end
 	self.arena:Start(); self:SetPhase("Live",map.Duration,"")
-	for _=1,3 do self.items:Spawn() end
+	if self.hazards then self.hazards:Reset() end
+	for _=1,4 do self.items:Spawn() end
 	local finish=workspace:GetServerTimeNow()+map.Duration
 	while workspace:GetServerTimeNow()<finish and #Players:GetPlayers()>0 do
 		local dt=RunService.Heartbeat:Wait()
@@ -187,6 +193,7 @@ function Round:Cycle()
 		workspace:SetAttribute("Remaining",#active)
 		if Rules.shouldEnd(teams,self.initialTeams) then break end
 		self.arena:Step(math.min(dt,.1),active); self.items:Step(dt); self.bots:Step()
+		if self.hazards then self.hazards:Step() end
 	end
 	local survivors=self:Active(); local team=nil; local tied=false
 	for _,actor in survivors do
