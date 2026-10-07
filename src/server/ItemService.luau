@@ -17,11 +17,24 @@ function Items.new(round,arena,combat,fx)
 	},Items)
 end
 
+function Items:UpdateHeld(p)
+	local char=U.character(p); if not char then return end
+	local old=char:FindFirstChild("HeldArenaItem"); if old then old:Destroy() end
+	local slot=math.clamp(tonumber(p:GetAttribute("ActiveSlot")) or 1,1,SLOT_COUNT)
+	local id=p:GetAttribute(itemAttr(slot)); if not id then return end
+	local hand=char:FindFirstChild("RightHand") or char:FindFirstChild("Right Arm") or char:FindFirstChild("RightLowerArm")
+	if not hand or not hand:IsA("BasePart") then return end
+	local holder=U.part(char,"HeldArenaItem",Vector3.new(.18,.18,.18),hand.CFrame*CFrame.new(0,-.7,-.2)*CFrame.Angles(0,0,-.18))
+	holder.Transparency=1; holder.CanCollide=false; holder.CanQuery=false; holder.CanTouch=false; holder.Massless=true
+	U.weld(hand,holder); Visuals.attach(holder,id)
+end
+
 function Items:SyncActive(p)
 	local slot=math.clamp(tonumber(p:GetAttribute("ActiveSlot")) or 1,1,SLOT_COUNT)
 	p:SetAttribute("ActiveSlot",slot)
 	p:SetAttribute("Item",p:GetAttribute(itemAttr(slot)))
 	p:SetAttribute("ItemUses",p:GetAttribute(usesAttr(slot)) or 0)
+	self:UpdateHeld(p)
 end
 
 function Items:Select(p,slot)
@@ -58,6 +71,7 @@ function Items:Clear(p)
 	local char=U.character(p)
 	if char then
 		local shield=char:FindFirstChild("ArenaShield"); if shield then shield:Destroy() end
+		local held=char:FindFirstChild("HeldArenaItem"); if held then held:Destroy() end
 	end
 end
 
