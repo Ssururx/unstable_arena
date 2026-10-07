@@ -72,15 +72,36 @@ actionButtons.Push=button(actionPanel,"PUSH\nE / Click",UDim2.fromOffset(88,62),
 actionButtons.Grab=button(actionPanel,"GRAB\nQ",UDim2.fromOffset(80,62),UDim2.fromOffset(99,7),function() send("Grab") end)
 actionButtons.UseItem=button(actionPanel,"ITEM\nF",UDim2.fromOffset(88,62),UDim2.fromOffset(184,7),function() send("UseItem") end)
 for _,b in actionButtons do b.TextWrapped=true end
-local inventory=panel("Inventory",UDim2.fromOffset(390,65),UDim2.fromScale(.5,.97),Vector2.new(.5,1))
-local itemName=label(inventory,"EMPTY HANDS",UDim2.new(1,-12,0,26),UDim2.fromOffset(6,3),16)
-local itemHint=label(inventory,"R / Y / tap a pickup • carry one item",UDim2.new(1,-12,0,29),UDim2.fromOffset(6,29),12)
+local inventory=panel("Inventory",UDim2.fromOffset(430,92),UDim2.fromScale(.5,.985),Vector2.new(.5,1))
+inventory.BackgroundTransparency=.22
+local itemHint=label(inventory,"R / Y pickup  •  1–3 select  •  F use",UDim2.new(1,-12,0,20),UDim2.fromOffset(6,2),11)
+itemHint.TextColor3=Color3.fromRGB(205,195,175)
+local slotButtons={}; local slotStrokes={}
+for i=1,3 do
+	local x=8+(i-1)*139
+	local b=button(inventory,tostring(i).."  EMPTY",UDim2.fromOffset(132,60),UDim2.fromOffset(x,25),function()
+		action:FireServer("SelectSlot",i)
+	end)
+	b.TextSize=13; b.TextWrapped=true
+	local stroke=Instance.new("UIStroke"); stroke.Thickness=1.5; stroke.Transparency=.5; stroke.Color=colors.gold; stroke.Parent=b
+	slotButtons[i]=b; slotStrokes[i]=stroke
+end
+local adrenaline=panel("Adrenaline",UDim2.fromOffset(320,28),UDim2.fromScale(.5,.82),Vector2.new(.5,1))
+adrenaline.BackgroundTransparency=.18
+local adrenalineTrack=Instance.new("Frame"); adrenalineTrack.Size=UDim2.new(1,-8,1,-8); adrenalineTrack.Position=UDim2.fromOffset(4,4)
+adrenalineTrack.BackgroundColor3=Color3.fromRGB(45,43,39); adrenalineTrack.BorderSizePixel=0; adrenalineTrack.Parent=adrenaline; roundCorner(adrenalineTrack,7)
+local adrenalineFill=Instance.new("Frame"); adrenalineFill.Size=UDim2.fromScale(0,1); adrenalineFill.BackgroundColor3=Color3.fromRGB(202,118,58)
+adrenalineFill.BorderSizePixel=0; adrenalineFill.Parent=adrenalineTrack; roundCorner(adrenalineFill,7)
+local adrenalineText=label(adrenalineTrack,"ADRENALINE 0%",UDim2.fromScale(1,1),UDim2.new(),11)
+local hazardPanel=panel("Hazard",UDim2.fromOffset(420,32),UDim2.fromScale(.5,.115),Vector2.new(.5,0))
+hazardPanel.Visible=false; hazardPanel.BackgroundTransparency=.16
+local hazardText=label(hazardPanel,"",UDim2.new(1,-12,1,0),UDim2.fromOffset(6,0),13)
 local crosshair=label(gui,"+",UDim2.fromOffset(24,24),UDim2.new(.5,-12,.5,-12),24)
 crosshair.TextTransparency=.15
 local lockPanel=panel("Lock",UDim2.fromOffset(190,32),UDim2.fromScale(.02,.97),Vector2.new(0,1))
-local lockButton=button(lockPanel,"SHIFT LOCK: OFF",UDim2.fromScale(1,1),UDim2.new(),function() wantLock=not wantLock end)
+local lockButton=button(lockPanel,"RSHIFT LOCK: OFF",UDim2.fromScale(1,1),UDim2.new(),function() wantLock=not wantLock end)
 lockPanel.BackgroundTransparency=1; lockButton.BackgroundTransparency=.35
-local controlHint=label(gui,"CLICK / E  PUSH     Q  GRAB     F  ITEM",UDim2.fromOffset(360,22),UDim2.new(.5,-180,1,-26),12)
+local controlHint=label(gui,"E PUSH  •  Q GRAB  •  F USE  •  SHIFT SPRINT  •  X DASH  •  C SLIDE  •  G RUSH",UDim2.fromOffset(670,22),UDim2.new(.5,-335,1,-120),11)
 local spec=panel("Spectator",UDim2.fromOffset(450,88),UDim2.fromScale(.5,.82),Vector2.new(.5,1))
 local specTitle=label(spec,"WATCH FROM THE STANDS",UDim2.new(1,-12,0,26),UDim2.fromOffset(6,3),14)
 local function character(actor) return if actor:IsA("Player") then actor.Character else actor end
@@ -118,13 +139,23 @@ end)
 UIS.InputBegan:Connect(function(input,processed)
 	if processed or UIS:GetFocusedTextBox() then return end
 	local key=input.KeyCode
-	if key == Enum.KeyCode.LeftShift or key == Enum.KeyCode.RightShift then wantLock=not wantLock
+	if key == Enum.KeyCode.LeftShift then action:FireServer("Sprint",true)
+	elseif key == Enum.KeyCode.RightShift then wantLock=not wantLock
+	elseif key == Enum.KeyCode.One then action:FireServer("SelectSlot",1)
+	elseif key == Enum.KeyCode.Two then action:FireServer("SelectSlot",2)
+	elseif key == Enum.KeyCode.Three then action:FireServer("SelectSlot",3)
+	elseif key == Enum.KeyCode.X or key == Enum.KeyCode.ButtonB then send("Dash")
+	elseif key == Enum.KeyCode.C then send("Slide")
+	elseif key == Enum.KeyCode.G then send("Adrenaline")
 	elseif key == Enum.KeyCode.E or key == Enum.KeyCode.ButtonR2 or input.UserInputType == Enum.UserInputType.MouseButton1 then send("Push")
 	elseif key == Enum.KeyCode.Q or key == Enum.KeyCode.ButtonX then send("Grab")
 	elseif key == Enum.KeyCode.F or key == Enum.KeyCode.ButtonL2 then send("UseItem")
 	end
 end)
-player.CharacterAdded:Connect(function() restoreCamera(); wantLock=false end)
+UIS.InputEnded:Connect(function(input)
+	if input.KeyCode == Enum.KeyCode.LeftShift then action:FireServer("Sprint",false) end
+end)
+player.CharacterAdded:Connect(function() restoreCamera(); wantLock=false; action:FireServer("Sprint",false) end)
 local effects=Instance.new("Folder"); effects.Name="ArenaLocalEffects"; effects.Parent=workspace
 local animatedBots={}
 local function registerBot(bot)
@@ -238,14 +269,33 @@ local function updateUI()
 		subtitle.Text=(workspace:GetAttribute("Mode") or "FFA").." • "..tostring(workspace:GetAttribute("Remaining") or 0).." remaining"
 	else subtitle.Text=workspace:GetAttribute("Message") or "" end
 	local id=player:GetAttribute("Item"); local def=Config.Items[id]
-	itemName.Text=if def then def.Name.." ×"..tostring(player:GetAttribute("ItemUses") or 1) else "EMPTY HANDS"
-	itemName.TextColor3=if def then def.Color else colors.text
 	local now=workspace:GetServerTimeNow()
-	if (player:GetAttribute("ShieldUntil") or 0) > now then itemHint.Text="SHIELD ACTIVE • blocks one hit"
-	elseif (player:GetAttribute("AnchorUntil") or 0) > now then itemHint.Text="ANCHORED • your slab is under extra stress"
-	else itemHint.Text=if def then def.Hint else "R / Y / tap a pickup • carry one item" end
-	inventory.Visible=active and def~=nil
-	inventory.Position=UDim2.fromScale(.5,.93)
+	local activeSlot=player:GetAttribute("ActiveSlot") or 1
+	for i=1,3 do
+		local slotId=player:GetAttribute("Inventory"..i)
+		local uses=player:GetAttribute("Inventory"..i.."Uses") or 0
+		local slotDef=Config.Items[slotId]
+		slotButtons[i].Text=tostring(i).."  "..(slotDef and (string.upper(slotDef.Name).."  ×"..uses) or "EMPTY")
+		slotButtons[i].TextColor3=slotDef and slotDef.Color or Color3.fromRGB(164,157,144)
+		slotButtons[i].BackgroundColor3=if i==activeSlot then Color3.fromRGB(77,67,50) else colors.soft
+		slotStrokes[i].Transparency=if i==activeSlot then .05 else .72
+		slotStrokes[i].Thickness=if i==activeSlot then 2.5 else 1
+	end
+	if (player:GetAttribute("ShieldUntil") or 0)>now then itemHint.Text="SHIELD ACTIVE  •  next hit blocked"
+	elseif (player:GetAttribute("AnchorUntil") or 0)>now then itemHint.Text="ANCHORED  •  reduced knockback"
+	elseif def then itemHint.Text=def.Hint.."  •  F to use"
+	else itemHint.Text="R / Y pickup  •  1–3 select  •  max 3 items" end
+	inventory.Visible=active
+	local adrenalineValue=math.clamp(player:GetAttribute("Adrenaline") or 0,0,Config.Adrenaline.Max)
+	adrenaline.Visible=active
+	adrenalineFill.Size=UDim2.fromScale(adrenalineValue/Config.Adrenaline.Max,1)
+	adrenalineText.Text=if (player:GetAttribute("AdrenalineUntil") or 0)>now then "ADRENALINE RUSH"
+		elseif adrenalineValue>=Config.Adrenaline.Max then "ADRENALINE READY  •  G"
+		else "ADRENALINE  "..math.floor(adrenalineValue).."%"
+	local hazard=workspace:GetAttribute("Hazard") or ""
+	hazardPanel.Visible=phase=="Live" and hazard~=""
+	hazardText.Text=if hazard=="Meteor" then "⚠  METEOR SHOWER  •  WATCH TELEGRAPHS"
+		elseif hazard=="Lions" then "⚠  LIONS RELEASED  •  KEEP MOVING" else ""
 	toastPanel.Visible=os.clock() < toastUntil
 	local statsFolder=player:FindFirstChild("leaderstats")
 	if statsFolder and statsFolder:FindFirstChild("Wins") and statsFolder:FindFirstChild("Coins") then
@@ -257,8 +307,9 @@ local function updateUI()
 	actionPanel.Visible=UIS.TouchEnabled and not following and phase~="Countdown" and phase~="Results"
 	controlHint.Visible=not UIS.TouchEnabled and active and not following
 	local pushWait=math.max(0,(cooldown.Push or 0)-os.clock())
-	controlHint.Text=if UIS.GamepadEnabled and not UIS.KeyboardEnabled then "R2  PUSH     X  GRAB     L2  ITEM"
-		elseif pushWait>0 then string.format("PUSH %.1fs     Q  GRAB     F  ITEM",pushWait) else "CLICK / E  PUSH     Q  GRAB     F  ITEM"
+	controlHint.Text=if UIS.GamepadEnabled and not UIS.KeyboardEnabled then "R2 PUSH  •  X GRAB  •  L2 ITEM  •  B DASH"
+		elseif pushWait>0 then string.format("PUSH %.1fs  •  Q GRAB  •  F USE  •  SHIFT SPRINT  •  X DASH  •  C SLIDE  •  G RUSH",pushWait)
+		else "E PUSH  •  Q GRAB  •  F USE  •  SHIFT SPRINT  •  X DASH  •  C SLIDE  •  G RUSH"
 	local texts=if UIS.TouchEnabled then {Push="PUSH",Grab="GRAB",UseItem="ITEM"}
 		elseif UIS.GamepadEnabled and not UIS.KeyboardEnabled then {Push="PUSH · R2",Grab="GRAB · X",UseItem="ITEM · L2"}
 		else {Push="PUSH\nE / Click",Grab="GRAB\nQ",UseItem="ITEM\nF"}
@@ -267,9 +318,9 @@ local function updateUI()
 		b.Text=if remaining > 0 then string.format("%.1fs",remaining) else texts[kind]
 		b.BackgroundColor3=if remaining > 0 then colors.bg else colors.soft
 	end
-	lockButton.Text=if locked then "SHIFT LOCK: ON" else "SHIFT LOCK: OFF"
+	lockButton.Text=if locked then "RSHIFT LOCK: ON" else "RSHIFT LOCK: OFF"
 	lockPanel.Visible=UIS.MouseEnabled and not following
-	crosshair.Visible=locked or (id == "Bow" and active and not following)
+	crosshair.Visible=locked or ((id=="Bow" or id=="Mace") and active and not following)
 	povButton.Text=if firstPerson then "POV: FIRST" else "POV: THIRD"
 	specTitle.Text=if following then "WATCHING "..actorName(following) else "WATCH FROM THE STANDS"
 end
