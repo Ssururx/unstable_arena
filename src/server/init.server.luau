@@ -8,6 +8,8 @@ local Round=require(script.RoundService)
 local Combat=require(script.PushService)
 local Items=require(script.ItemService)
 local Bots=require(script.BotService)
+local Movement=require(script.MovementService)
+local Hazards=require(script.HazardService)
 
 -- Remove only the stock template floor/spawn; leave user-authored scenery alone.
 for _,name in {"Baseplate","SpawnLocation"} do
@@ -31,6 +33,9 @@ local combat=Combat.new(round,arena,fx)
 local items=Items.new(round,arena,combat,fx)
 round.combat=combat; round.items=items
 round.bots=Bots.new(round,arena,combat,items)
+local movement=Movement.new(round,arena,combat,fx)
+local hazards=Hazards.new(round,arena,combat,fx)
+round.movement=movement; round.hazards=hazards
 Players.PlayerAdded:Connect(function(p) round:AddPlayer(p) end)
 Players.PlayerRemoving:Connect(function(p) round:RemovePlayer(p) end)
 for _,p in Players:GetPlayers() do round:AddPlayer(p) end
@@ -39,9 +44,14 @@ action.OnServerEvent:Connect(function(p,kind,arg)
 	if kind == "Push" then combat:Push(p)
 	elseif kind == "Grab" then combat:Grab(p)
 	elseif kind == "UseItem" then items:Use(p,arg)
+	elseif kind == "SelectSlot" then items:Select(p,arg)
+	elseif kind == "Sprint" then movement:Sprint(p,arg==true)
+	elseif kind == "Dash" then movement:Dash(p,arg)
+	elseif kind == "Slide" then movement:Slide(p,arg)
+	elseif kind == "Adrenaline" then movement:Adrenaline(p)
 	elseif kind == "Snapshot" and combat:Ready(p,"Snapshot",1) then round:Broadcast()
 	end
 end)
 RunService.Heartbeat:Connect(function() arena:StepPractice() end)
 task.spawn(function() round:Run() end)
-print("[UnstableArena] "..Config.Version.." ready • Click/E push • Q grab • F item • Shift mouse lock")
+print("[UnstableArena] "..Config.Version.." ready • E push • Q grab • F item • Shift sprint • X dash • C slide • G adrenaline")
