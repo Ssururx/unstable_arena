@@ -78,8 +78,9 @@ function Movement:Adrenaline(p)
 	end
 	p:SetAttribute("Adrenaline",0)
 	p:SetAttribute("AdrenalineUntil",workspace:GetServerTimeNow()+Config.Adrenaline.Duration)
-	local _,hum=U.root(p); if hum then hum.WalkSpeed=Config.Movement.AdrenalineSpeed end
-	self.fx:FireAllClients("Adrenaline",select(1,U.root(p)).Position)
+	local root,hum=U.root(p)
+	if hum then hum.WalkSpeed=Config.Movement.AdrenalineSpeed end
+	if root then self.fx:FireAllClients("Adrenaline",root.Position) end
 	U.notify(self.fx,p,"Toast","ADRENALINE RUSH")
 end
 
