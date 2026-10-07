@@ -123,6 +123,14 @@ function Arena:Under(root) return self:GroundAt(root.Position,14) end
 
 function Arena:ApplySlopePhysics(active)
 	if not self.core or not self.core.Parent then return end
+
+	for _,actor in active do
+		local _,hum=U.root(actor)
+		if hum and not hum.PlatformStand then
+			hum.WalkSpeed=if actor:GetAttribute("Bot") then Config.Bots.WalkSpeed else 20
+		end
+	end
+
 	local normal=self.core.CFrame.UpVector
 	local tilt=math.deg(math.acos(math.clamp(normal:Dot(Vector3.yAxis),-1,1)))
 	if tilt < Config.Arena.SlipStart then return end
