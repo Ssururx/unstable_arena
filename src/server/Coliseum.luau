@@ -178,10 +178,12 @@ function Coliseum.build(world)
 		if locked then
 			title.TextColor3=Color3.fromRGB(142,135,123); small.TextColor3=Color3.fromRGB(120,114,104)
 		end
+		local parts={frame,panel}
 		for _,side in {-1,1} do
-			U.part(voting,"BoardPost",Vector3.new(.7,6,.7),CFrame.new(x+side*(width/2-.8),132.5,z),bronze,Enum.Material.Metal).CanCollide=false
+			local post=U.part(voting,"BoardPost",Vector3.new(.7,6,.7),CFrame.new(x+side*(width/2-.8),132.5,z),bronze,Enum.Material.Metal)
+			post.CanCollide=false; table.insert(parts,post)
 		end
-		return title,small
+		return title,small,parts
 	end
 
 	local function pad(kind,index,name,sub,x,z,width,depth)
@@ -189,8 +191,8 @@ function Coliseum.build(world)
 		local edge=U.part(voting,"SelectionBorder",Vector3.new(width+.8,.1,depth+.8),CFrame.new(x,130.0,z),bronze,Enum.Material.Metal)
 		edge.CanCollide=false
 		local boardZ=z-depth/2-2.1
-		local title,small=board(x,boardZ,width,name,sub,false)
-		table.insert(pads,{part=base,kind=kind,index=index,title=title,small=small,name=name,edge=edge})
+		local title,small,boardParts=board(x,boardZ,width,name,sub,false)
+		table.insert(pads,{part=base,kind=kind,index=index,title=title,small=small,name=name,edge=edge,boardParts=boardParts})
 	end
 
 	-- MM2-inspired physical voting wall: large framed choice card + standing tile.
