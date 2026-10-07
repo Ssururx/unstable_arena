@@ -164,7 +164,7 @@ function Arena:ApplySlopePhysics(active)
 		)
 
 		if alpha>.55 then
-			hum.WalkSpeed=math.max(12,(actor:GetAttribute("Bot") and Config.Bots.WalkSpeed or 20)*(1-alpha*.26))
+			hum.WalkSpeed=math.max(12,hum.WalkSpeed*(1-alpha*.20))
 		end
 	end
 end
