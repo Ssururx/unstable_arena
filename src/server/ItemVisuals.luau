@@ -16,6 +16,16 @@ function Visuals.attach(root,id)
 	if id=="Shield" then
 		finish(G.cylinder(root,"BronzeShield",1.18,.22,root.CFrame*CFrame.Angles(math.pi/2,0,0),bronze,Enum.Material.Metal))
 		local boss=piece("ShieldBoss",Vector3.one*.6,CFrame.new(0,0,-.2),iron,Enum.Material.Metal); boss.Shape=Enum.PartType.Ball
+	elseif id=="Sword" then
+		piece("SwordGrip",Vector3.new(.28,.8,.28),CFrame.new(0,-.65,0),wood,Enum.Material.Wood)
+		piece("SwordGuard",Vector3.new(1.15,.16,.25),CFrame.new(0,-.2,0),bronze,Enum.Material.Metal)
+		local blade=piece("SwordBlade",Vector3.new(.24,2.5,.16),CFrame.new(0,1.1,0),Color3.fromRGB(202,202,196),Enum.Material.Metal)
+		blade.Reflectance=.08
+	elseif id=="Mace" then
+		piece("MaceHandle",Vector3.new(.32,1.9,.32),CFrame.new(0,-.25,0),wood,Enum.Material.Wood)
+		piece("MaceCollar",Vector3.new(.7,.22,.7),CFrame.new(0,.65,0),bronze,Enum.Material.Metal)
+		local head=piece("MaceHead",Vector3.new(1.25,1.25,1.25),CFrame.new(0,1.35,0),iron,Enum.Material.Metal)
+		head.Shape=Enum.PartType.Ball
 	elseif id=="Bow" then
 		local previous=nil
 		for i=0,8 do
