@@ -69,7 +69,7 @@ end
 
 function Hazards:ImpactMeteor(position)
 	if self.round.phase~="Live" then return end
-	local slab=self.arena:AddHazardWeight(position,1.9,6)
+	local slab=self.arena:AddHazardWeight(position,.85,6)
 	if slab and not slab.broken then
 		slab.stress+=7
 		local stone=U.part(slab.model,"MeteorFragment",Vector3.new(3.2,2.3,3.2),slab.part.CFrame*CFrame.new(0,3.3,0),Color3.fromRGB(72,61,52),Enum.Material.Rock)
@@ -153,7 +153,7 @@ function Hazards:StepLions()
 			if lion.model.Parent then lion.model:Destroy() end
 			table.remove(self.lions,i); continue
 		end
-		self.arena:AddHazardWeight(root.Position,2.15,.4)
+		self.arena:AddHazardWeight(root.Position,.72,.4)
 		local target,distance=nil,math.huge
 		for _,actor in active do
 			local other=U.root(actor)
