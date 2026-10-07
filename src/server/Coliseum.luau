@@ -92,18 +92,18 @@ function Coliseum.build(world)
 		for row=0,17 do
 			local radius=if section == 1 then 158+row*2.35 else 207+row*2.15
 			local y=if section == 1 then 133+row*1.55 else 154+row*1.6
-			local pieces=G.ring(tiers,"SeatingTier",radius,if section == 1 then 2.2 else 1.7,y-.75,1.5,pale,material,64,.96)
+			local pieces=G.ring(tiers,"SeatingTier",radius,if section == 1 then 2.2 else 1.7,y-.75,1.5,pale,material,48,.96)
 			for index,part in pieces do
 				-- Leave a monumental, open entrance above the lower lobby courtyard.
 				local p=part.Position
 				if p.Z < -150 and math.abs(p.X)<50 then part:Destroy()
-				elseif (index-1)%16 == 0 then part.Name="RadialStair"; part.Color=stone
+				elseif (index-1)%12 == 0 then part.Name="RadialStair"; part.Color=stone
 				else part.Color=pale:Lerp(stone,(row%3)*.08) end
 			end
 		end
 	end
 	-- A continuous outer arcade, with actual openings rather than painted arches.
-	local bays=56; local radius=276
+	local bays=40; local radius=276
 	for level=0,2 do
 		local baseY=125+level*24
 		for i=0,bays-1 do
@@ -121,16 +121,17 @@ function Coliseum.build(world)
 	G.ring(building,"OuterParapet",268,1,178,4,pale,material,112,.97)
 
 	-- Distant seating fades into the atmosphere so the arena feels far larger than the playable shell.
-	for row=0,20 do
-		local radius=292+row*7.5
-		local y=198+row*2.3
-		local fade=math.clamp(row/20,0,1)
+	for row=0,11 do
+		local distantRadius=292+row*12.5
+		local y=198+row*3.8
+		local fade=math.clamp(row/11,0,1)
 		local c=pale:Lerp(Color3.fromRGB(199,190,176),fade*.55)
-		for _,part in G.ring(building,"DistantTier",radius,6.6,y,2.2,c,material,96,.98) do
-			part.Transparency=.08+fade*.58
+		for _,part in G.ring(building,"DistantTier",distantRadius,10.8,y,2.2,c,material,48,.98) do
+			part.Transparency=0
 			part.CanCollide=false
 			part.CanQuery=false
-			part.CastShadow=row<7
+			part.CastShadow=false
+			part.CanTouch=false
 		end
 	end
 	-- Banners, bronze brackets and limited warm lights set the visual rhythm.
@@ -154,56 +155,48 @@ function Coliseum.build(world)
 		for _,part in ring do part.Transparency=.16+i*.08; part.CanCollide=false; part.CanQuery=false end
 	end
 	local lobby=model(world,"LobbyCourtyard")
-	U.part(lobby,"CourtyardFloor",Vector3.new(74,3,62),CFrame.new(0,128.5,-183),stone,material)
-	for _,x in {-34,34} do
-		U.part(lobby,"CourtyardInlay",Vector3.new(.3,.035,54),CFrame.new(x,130.02,-183),bronze,Enum.Material.Metal).CanCollide=false
-		statue(lobby,CFrame.new(x,131.5,-203)); torch(lobby,CFrame.new(x,132,-158))
+	U.part(lobby,"CourtyardFloor",Vector3.new(94,3,70),CFrame.new(0,128.5,-184),stone,material)
+	for _,x in {-43,43} do
+		U.part(lobby,"CourtyardInlay",Vector3.new(.3,.035,62),CFrame.new(x,130.02,-184),bronze,Enum.Material.Metal).CanCollide=false
+		statue(lobby,CFrame.new(x,131.5,-207)); torch(lobby,CFrame.new(x,132,-160))
 	end
 	local spawn=Instance.new("SpawnLocation"); spawn.Name="LobbySpawn"; spawn.Size=Vector3.new(5,.2,5)
-	spawn.CFrame=CFrame.new(0,130.1,-214); spawn.Transparency=1; spawn.Anchored=true; spawn.CanCollide=false
+	spawn.CFrame=CFrame.lookAt(Vector3.new(0,130.1,-162),Vector3.new(0,130.1,-206))
+	spawn.Transparency=1; spawn.Anchored=true; spawn.CanCollide=false
 	spawn.Duration=0; spawn.Neutral=true; spawn.Parent=lobby
-	local inscription=U.part(lobby,"ArenaInscription",Vector3.new(40,4,.8),CFrame.new(0,141,-225),shadow,material)
-	sign(inscription,Enum.NormalId.Back,"ROMAN COLISEUM","PUSH  /  BALANCE  /  SURVIVE")
-	local pads={}
 	local voting=model(lobby,"VotingGallery")
-	local header=U.part(voting,"VotingHeader",Vector3.new(70,5,.8),CFrame.new(0,147,-214),shadow,material)
-	sign(header,Enum.NormalId.Back,"ARENA VOTING","STAND ON A MARKED TILE TO CAST YOUR VOTE")
-
-	local function board(x,z,width,name,sub,locked)
-		local frame=U.part(voting,"VoteBoardFrame",Vector3.new(width+1.5,15,1.1),CFrame.new(x,139,z),bronze,Enum.Material.Metal)
-		frame.CanCollide=false
-		local panel=U.part(voting,"VoteBoard",Vector3.new(width,13.5,.7),CFrame.new(x,139,z+.3),if locked then Color3.fromRGB(63,59,52) else Color3.fromRGB(88,74,55),Enum.Material.WoodPlanks)
-		panel.CanCollide=false
-		local title,small=sign(panel,Enum.NormalId.Back,name,sub)
-		if locked then
-			title.TextColor3=Color3.fromRGB(142,135,123); small.TextColor3=Color3.fromRGB(120,114,104)
+	local header=U.part(voting,"VotingHeader",Vector3.new(81,4,.8),CFrame.new(0,151,-208),shadow,material)
+	local headerTitle,headerHint=sign(header,Enum.NormalId.Back,"CHOOSE AN ARENA","STEP ON A TILE")
+	local pads={}
+	for i=1,3 do
+		local x=(i-2)*28
+		local base=U.part(voting,"SelectionPad",Vector3.new(23,.24,12),CFrame.new(x,130.15,-193),shadow,Enum.Material.Slate)
+		base:SetAttribute("VoteIndex",i)
+		local edgePart=U.part(voting,"SelectionBorder",Vector3.new(23.6,.10,12.6),CFrame.new(x,130.02,-193),bronze,Enum.Material.Metal)
+		edgePart.CanCollide=false
+		local frame=U.part(voting,"VoteBoardFrame",Vector3.new(24,16,1.1),CFrame.new(x,139,-207),bronze,Enum.Material.Metal)
+		local panel=U.part(voting,"VoteBoard",Vector3.new(22.9,14.9,.6),CFrame.new(x,139,-206.4),Color3.fromRGB(44,43,37),Enum.Material.Slate)
+		local title,small=sign(panel,Enum.NormalId.Back,"","")
+		title.Position=UDim2.fromScale(.04,.55); title.Size=UDim2.fromScale(.92,.23); title.TextSize=40
+		small.Position=UDim2.fromScale(.04,.82); small.Size=UDim2.fromScale(.92,.12); small.TextSize=23
+		-- A small architectural medallion, built from UI shapes: no remote image dependency.
+		local medallion=Instance.new("Frame"); medallion.Name="ArenaMedallion"; medallion.BackgroundTransparency=1
+		medallion.Size=UDim2.fromScale(.72,.36); medallion.Position=UDim2.fromScale(.14,.10); medallion.Parent=title.Parent
+		for j=1,5 do
+			local archFrame=Instance.new("Frame"); archFrame.BorderSizePixel=0; archFrame.BackgroundColor3=Color3.fromRGB(173,147,102)
+			archFrame.Size=UDim2.fromScale(.14,.82); archFrame.Position=UDim2.fromScale((j-1)*.19,.18); archFrame.Parent=medallion
+			local cutout=Instance.new("Frame"); cutout.BorderSizePixel=0; cutout.BackgroundColor3=panel.Color
+			cutout.Size=UDim2.fromScale(.56,.77); cutout.Position=UDim2.fromScale(.22,.23); cutout.Parent=archFrame
+			local corner=Instance.new("UICorner"); corner.CornerRadius=UDim.new(.5,0); corner.Parent=cutout
 		end
-		local parts={frame,panel}
+		local symbol=Instance.new("TextLabel"); symbol.BackgroundTransparency=1; symbol.Size=UDim2.fromScale(.9,.42)
+		symbol.Position=UDim2.fromScale(.05,.08); symbol.Font=Enum.Font.GothamBold; symbol.TextSize=74
+		symbol.TextColor3=Color3.fromRGB(210,184,137); symbol.Text=""; symbol.Parent=title.Parent
 		for _,side in {-1,1} do
-			local post=U.part(voting,"BoardPost",Vector3.new(.7,6,.7),CFrame.new(x+side*(width/2-.8),132.5,z),bronze,Enum.Material.Metal)
-			post.CanCollide=false; table.insert(parts,post)
+			U.part(voting,"BoardPost",Vector3.new(.7,6,.7),CFrame.new(x+side*10,132,-207),bronze,Enum.Material.Metal)
 		end
-		return title,small,parts
+		table.insert(pads,{part=base,index=i,title=title,small=small,edge=edgePart,boardParts={frame,panel},medallion=medallion,symbol=symbol})
 	end
-
-	local function pad(kind,index,name,sub,x,z,width,depth)
-		local base=U.part(voting,"SelectionPad",Vector3.new(width,.32,depth),CFrame.new(x,130.18,z),Color3.fromRGB(83,73,59),Enum.Material.Slate)
-		local edge=U.part(voting,"SelectionBorder",Vector3.new(width+.8,.1,depth+.8),CFrame.new(x,130.0,z),bronze,Enum.Material.Metal)
-		edge.CanCollide=false
-		local boardZ=z-depth/2-2.1
-		local title,small,boardParts=board(x,boardZ,width,name,sub,false)
-		table.insert(pads,{part=base,kind=kind,index=index,title=title,small=small,name=name,edge=edge,boardParts=boardParts})
-	end
-
-	-- MM2-inspired physical voting wall: large framed choice card + standing tile.
-	pad("map",1,"ROMAN COLISEUM","STAND HERE TO VOTE",0,-163,27,10)
-	board(-30,-170,24,"LOCKED ARENA","MORE MAPS COMING",true)
-	board(30,-170,24,"LOCKED ARENA","MORE MAPS COMING",true)
-
-	for i,mode in {"FFA","Duos","Squads"} do
-		local display=if mode=="FFA" then "FREE FOR ALL" else string.upper(mode)
-		pad("mode",i,display,"MODE VOTE",(i-2)*27,-193,23,9)
-	end
-	return {spawn=CFrame.lookAt(Vector3.new(0,134,-214),Vector3.new(0,134,0)),pads=pads,lobby=lobby}
+	return {spawn=CFrame.lookAt(Vector3.new(0,134,-162),Vector3.new(0,134,-207)),pads=pads,lobby=lobby,header=headerTitle,headerHint=headerHint}
 end
 return Coliseum

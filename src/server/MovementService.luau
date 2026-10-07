@@ -5,7 +5,7 @@ local U=require(script.Parent.Util)
 local Movement={}; Movement.__index=Movement
 
 function Movement.new(round,arena,combat,fx)
-	return setmetatable({round=round,arena=arena,combat=combat,fx=fx,times={}},Movement)
+	return setmetatable({round=round,arena=arena,combat=combat,fx=fx,times={},bursts={}},Movement)
 end
 
 function Movement:Ready(p,key,cooldown)
@@ -17,6 +17,7 @@ end
 
 function Movement:Clear(p)
 	self.times[p]=nil
+	self:EndBurst(p)
 	p:SetAttribute("Sprinting",false)
 	p:SetAttribute("SlidingUntil",0)
 	p:SetAttribute("DashUntil",0)
@@ -24,6 +25,33 @@ function Movement:Clear(p)
 	p:SetAttribute("AdrenalineUntil",0)
 	local _,hum=U.root(p)
 	if hum then hum.WalkSpeed=Config.Movement.WalkSpeed end
+end
+
+function Movement:EndBurst(p)
+	local burst=self.bursts[p]; self.bursts[p]=nil
+	if not burst then return end
+	local root,hum=U.root(p)
+	if root and not root.Anchored and not hum.PlatformStand and root:CanSetNetworkOwnership() then
+		if p:IsA("Player") then root:SetNetworkOwnershipAuto() else root:SetNetworkOwner(nil) end
+	end
+end
+function Movement:Burst(p,direction,speed,duration,sliding)
+	self:EndBurst(p)
+	local root=U.root(p)
+	if root:CanSetNetworkOwnership() then root:SetNetworkOwner(nil) end
+	self.bursts[p]={direction=direction,speed=speed,duration=duration,age=0,sliding=sliding}
+end
+function Movement:Step(dt)
+	for p,burst in self.bursts do
+		local root,hum=U.root(p)
+		burst.age+=dt
+		if not self.round:IsActive(p) or not root or root.Anchored or hum.PlatformStand or burst.age>=burst.duration then
+			self:EndBurst(p); continue
+		end
+		local speed=burst.speed*(if burst.sliding then 1-.48*burst.age/burst.duration else 1)
+		local v=root.AssemblyLinearVelocity
+		root.AssemblyLinearVelocity=Vector3.new(burst.direction.X*speed,v.Y,burst.direction.Z*speed)
+	end
 end
 
 function Movement:Sprint(p,on)
@@ -44,6 +72,7 @@ function Movement:Dash(p,aim)
 	if flat.Magnitude<.1 then flat=Vector3.new(root.CFrame.LookVector.X,0,root.CFrame.LookVector.Z) end
 	if flat.Magnitude<.1 then return end
 	flat=flat.Unit
+	self:Burst(p,flat,Config.Movement.DashSpeed,.18,false)
 	local v=root.AssemblyLinearVelocity
 	root.AssemblyLinearVelocity=Vector3.new(flat.X*Config.Movement.DashSpeed,math.max(v.Y,2),flat.Z*Config.Movement.DashSpeed)
 	p:SetAttribute("DashUntil",workspace:GetServerTimeNow()+.28)
@@ -54,6 +83,7 @@ end
 function Movement:Slide(p,aim)
 	if not self.round:IsActive(p) or not self:Ready(p,"Slide",Config.Movement.SlideCooldown) then return end
 	local root,hum=U.root(p); if not root or hum.PlatformStand then return end
+	if hum.FloorMaterial==Enum.Material.Air or not self.arena:Under(root) then return end
 	local direction=self.combat:Aim(p,aim)
 	local flat=Vector3.new(direction.X,0,direction.Z)
 	if flat.Magnitude<.1 then flat=Vector3.new(root.CFrame.LookVector.X,0,root.CFrame.LookVector.Z) end
@@ -62,6 +92,8 @@ function Movement:Slide(p,aim)
 	local normal=self.arena.core and self.arena.core.CFrame.UpVector or Vector3.yAxis
 	local downhill=Vector3.new(0,-1,0)-normal*Vector3.new(0,-1,0):Dot(normal)
 	if downhill.Magnitude>.05 then flat=(flat+downhill.Unit*.42).Unit end
+	local momentum=Vector3.new(root.AssemblyLinearVelocity.X,0,root.AssemblyLinearVelocity.Z).Magnitude
+	self:Burst(p,flat,math.clamp(momentum+8,Config.Movement.SlideSpeed,55),.52,true)
 	local v=root.AssemblyLinearVelocity
 	root.AssemblyLinearVelocity=Vector3.new(flat.X*Config.Movement.SlideSpeed,math.min(v.Y,0),flat.Z*Config.Movement.SlideSpeed)
 	p:SetAttribute("SlidingUntil",workspace:GetServerTimeNow()+.72)

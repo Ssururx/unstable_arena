@@ -32,6 +32,7 @@ function Combat:Enemy(a,b)
 		and a:GetAttribute("TeamId") ~= b:GetAttribute("TeamId")
 end
 function Combat:Visible(a,b)
+	if not a or not b then return false end
 	local params = RaycastParams.new(); params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = {a.Parent,b.Parent}
 	return workspace:Raycast(a.Position,b.Position-a.Position,params) == nil
@@ -95,13 +96,14 @@ function Combat:Knock(target, velocity, attacker, isRescue)
 			end
 		end
 	end)
+	if attacker then U.notify(self.fx,attacker,"ConfirmHit",root.Position) end
 	self.fx:FireAllClients("Hit",root.Position,velocity)
 	return true
 end
 function Combat:Push(p, power, ram)
 	if not self:CanAct(p) or not self:Ready(p,"Push",Config.Combat.Cooldown) then return false end
-	local root = U.root(p); if not root then return false end
-	p:SetAttribute("SwingUntil",workspace:GetServerTimeNow()+.24)
+	local root,hum = U.root(p); if not root or hum.PlatformStand or root.Anchored then return false end
+	p:SetAttribute("SwingUntil",workspace:GetServerTimeNow()+.40)
 	U.notify(self.fx,p,"Cooldown","Push",Config.Combat.Cooldown)
 	self.fx:FireAllClients("Swing",root.Position,root.CFrame.LookVector)
 	local target = self:Target(p, if ram then 11 else Config.Combat.Range, false)
@@ -122,7 +124,9 @@ function Combat:Push(p, power, ram)
 end
 function Combat:Grab(p)
 	if not self:CanAct(p) or not self:Ready(p,"Grab",Config.Combat.GrabCooldown) then return end
-	p:SetAttribute("GrabUntil",workspace:GetServerTimeNow()+.38)
+	local actionRoot,actionHum=U.root(p)
+	if not actionRoot or actionRoot.Anchored or actionHum.PlatformStand then return end
+	p:SetAttribute("GrabUntil",workspace:GetServerTimeNow()+.52)
 	U.notify(self.fx,p,"Cooldown","Grab",Config.Combat.GrabCooldown)
 	local target = self:Target(p,Config.Combat.GrabRange,true)
 	if not target then return end

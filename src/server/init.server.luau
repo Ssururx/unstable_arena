@@ -51,7 +51,9 @@ action.OnServerEvent:Connect(function(p,kind,arg)
 	elseif kind == "Dash" then movement:Dash(p,arg)
 	elseif kind == "Slide" then movement:Slide(p,arg)
 	elseif kind == "Adrenaline" then movement:Adrenaline(p)
-	elseif kind == "Snapshot" and combat:Ready(p,"Snapshot",1) then round:Broadcast()
+	elseif kind == "Snapshot" and combat:Ready(p,"Snapshot",1) then
+		round:Broadcast()
+		if not p:GetAttribute("InRound") then fx:FireClient(p,"LobbyView",arena:LobbyCFrame(p.UserId%5)) end
 	end
 end)
 RunService.Heartbeat:Connect(function() arena:StepPractice() end)

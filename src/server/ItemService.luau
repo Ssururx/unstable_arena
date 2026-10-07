@@ -3,7 +3,8 @@ local Players=game:GetService("Players")
 local Debris=game:GetService("Debris")
 local Config=require(game:GetService("ReplicatedStorage").Shared.Config)
 local U=require(script.Parent.Util)
-local Visuals=require(script.Parent.ItemVisuals)
+local Visuals=require(game:GetService("ReplicatedStorage").Shared.ItemModels)
+local Rules=require(game:GetService("ReplicatedStorage").Shared.Rules)
 local Items={}; Items.__index=Items
 
 local SLOT_COUNT=3
@@ -13,20 +14,33 @@ local function usesAttr(i) return "Inventory"..i.."Uses" end
 function Items.new(round,arena,combat,fx)
 	return setmetatable({
 		round=round,arena=arena,combat=combat,fx=fx,
-		arrows={},maces={},nextSpawn=0,
+		arrows={},maces={},nextSpawn=0,nextProjectile=0,
 	},Items)
 end
 
 function Items:UpdateHeld(p)
 	local char=U.character(p); if not char then return end
-	local old=char:FindFirstChild("HeldArenaItem"); if old then old:Destroy() end
+	local old=char:FindFirstChild("HeldArenaItem")
 	local slot=math.clamp(tonumber(p:GetAttribute("ActiveSlot")) or 1,1,SLOT_COUNT)
-	local id=p:GetAttribute(itemAttr(slot)); if not id then return end
-	local hand=char:FindFirstChild("RightHand") or char:FindFirstChild("Right Arm") or char:FindFirstChild("RightLowerArm")
+	local id=p:GetAttribute(itemAttr(slot))
+	if old and old:GetAttribute("ItemId")==id then return end
+	if old then old:Destroy() end
+	if not id then return end
+	local side=if id=="Shield" or id=="Bow" then "Left" else "Right"
+	local hand=char:FindFirstChild(side.."Hand") or char:FindFirstChild(side.." Arm") or char:FindFirstChild(side.."LowerArm")
 	if not hand or not hand:IsA("BasePart") then return end
-	local holder=U.part(char,"HeldArenaItem",Vector3.new(.18,.18,.18),hand.CFrame*CFrame.new(0,-.7,-.2)*CFrame.Angles(0,0,-.18))
+	local holder=U.part(char,"HeldArenaItem",Vector3.new(.18,.18,.18),hand.CFrame*CFrame.new(0,-hand.Size.Y*.42,-.15)*CFrame.Angles(if id=="Shield" then 0 else math.pi/2,0,0))
 	holder.Transparency=1; holder.CanCollide=false; holder.CanQuery=false; holder.CanTouch=false; holder.Massless=true
+	holder:SetAttribute("ItemId",id)
 	U.weld(hand,holder); Visuals.attach(holder,id)
+	if id=="Sword" then
+		local blade=holder:FindFirstChild("Blade")
+		local a=Instance.new("Attachment"); a.Position=Vector3.new(0,1.4,0); a.Parent=blade
+		local b=Instance.new("Attachment"); b.Position=Vector3.new(0,-.9,0); b.Parent=blade
+		local trail=Instance.new("Trail"); trail.Name="BladeTrail"; trail.Attachment0=a; trail.Attachment1=b
+		trail.Lifetime=.12; trail.MinLength=.1; trail.Color=ColorSequence.new(Color3.fromRGB(228,212,174))
+		trail.Transparency=NumberSequence.new(.6,1); trail.LightEmission=.35; trail.Enabled=false; trail.Parent=blade
+	end
 end
 
 function Items:SyncActive(p)
@@ -38,9 +52,8 @@ function Items:SyncActive(p)
 end
 
 function Items:Select(p,slot)
-	if typeof(slot)~="number" then return end
-	slot=math.floor(slot)
-	if slot<1 or slot>SLOT_COUNT then return end
+	if not Rules.validSlot(slot) or not self.round:IsActive(p) then return end
+	if (p:GetAttribute("ItemActionUntil") or 0)>workspace:GetServerTimeNow() then return end
 	p:SetAttribute("ActiveSlot",slot)
 	self:SyncActive(p)
 end
@@ -96,7 +109,7 @@ function Items:Pickup(p,slab,pickup,id)
 	p:SetAttribute(usesAttr(slot),Config.Items[id].Uses)
 	if not p:GetAttribute("Item") then p:SetAttribute("ActiveSlot",slot) end
 	self:SyncActive(p)
-	U.notify(self.fx,p,"Toast",Config.Items[id].Name.." → SLOT "..slot)
+	U.notify(self.fx,p,"Pickup",id,slot)
 end
 
 function Items:Spawn()
@@ -132,15 +145,27 @@ function Items:Consume(p,amount)
 		local nextSlot=self:FirstOccupied(p)
 		if nextSlot then p:SetAttribute("ActiveSlot",nextSlot) end
 	end
-	self:SyncActive(p)
+	local char=U.character(p)
+	local held=char and char:FindFirstChild("HeldArenaItem")
+	local waitTime=math.max(0,(p:GetAttribute("ItemActionUntil") or 0)-workspace:GetServerTimeNow())
+	-- Keep the last-use weapon in hand until its follow-through completes.
+	if waitTime>0 and held then
+		task.delay(waitTime,function()
+			if p.Parent and U.character(p)==char and char:FindFirstChild("HeldArenaItem")==held then self:SyncActive(p) end
+		end)
+	else self:SyncActive(p) end
 end
 
 function Items:Use(p,aim)
 	if not self.round:IsActive(p) then return end
+	local checkRoot,checkHum=U.root(p)
+	if not checkRoot or checkRoot.Anchored or checkHum.PlatformStand then return end
+	if (p:GetAttribute("ItemActionUntil") or 0)>workspace:GetServerTimeNow() then return end
 	self:SyncActive(p)
 	local id=p:GetAttribute("Item"); local def=Config.Items[id]
 	if not def then return end
-	if not self.combat:Ready(p,"Item",.72) then return end
+	local duration=if id=="Mace" then .9 elseif id=="Bow" then .65 else .55
+	if not self.combat:Ready(p,"Item",if id=="Sword" then .60 else .85) then return end
 	local root=U.root(p); if not root then return end
 	local now=workspace:GetServerTimeNow()
 
@@ -148,24 +173,31 @@ function Items:Use(p,aim)
 		local target=self.combat:Target(p,Config.Combat.MaceLockRange,false)
 		if not target then U.notify(self.fx,p,"Toast","NO TARGET IN MACE RANGE"); return end
 		local targetRoot=U.root(target); if not targetRoot then return end
-		p:SetAttribute("ItemActionUntil",now+.65); p:SetAttribute("ItemActionKind",id)
-		self.fx:FireAllClients("DangerCircle",targetRoot.Position,5.5)
+		p:SetAttribute("ItemActionDuration",duration)
+		p:SetAttribute("ItemActionUntil",now+duration); p:SetAttribute("ItemActionKind",id)
+		self.fx:FireAllClients("MaceWarning",targetRoot.Position,Config.Combat.MaceWarning)
+		self.nextProjectile+=1
 		table.insert(self.maces,{
-			p=p,target=target,pos=root.Position+root.CFrame.LookVector*2+Vector3.new(0,1.2,0),
-			vel=root.CFrame.LookVector*Config.Combat.MaceSpeed,age=0,delay=.32,visualAge=0,
+			id=self.nextProjectile,p=p,target=target,pos=root.Position+root.CFrame.LookVector*2+Vector3.new(0,1.2,0),
+			vel=(targetRoot.Position-root.Position).Unit*Config.Combat.MaceSpeed,age=0,delay=Config.Combat.MaceWarning,visualAge=0,
+			params=(function() local params=RaycastParams.new(); params.FilterType=Enum.RaycastFilterType.Exclude; params.FilterDescendantsInstances={U.character(p)}; return params end)(),
 		})
 		self:Consume(p,1)
 		U.notify(self.fx,p,"Cooldown","UseItem",.72)
 		return
 	end
 
-	p:SetAttribute("ItemActionUntil",now+.48)
+	p:SetAttribute("ItemActionDuration",duration)
+	p:SetAttribute("ItemActionUntil",now+duration)
 	p:SetAttribute("ItemActionKind",id)
 	local consumed=true
 	if id=="Sword" then
-		local target=self.combat:Target(p,Config.Combat.SwordRange,false)
-		self.fx:FireAllClients("SwordSwing",root.Position,root.CFrame.LookVector)
-		if target then
+		p:SetAttribute("AttackIndex",(p:GetAttribute("AttackIndex") or 0)+1)
+		local roundId=self.round.roundId
+		task.delay(.16,function()
+			if self.round.roundId~=roundId or not self.round:IsActive(p) or not root.Parent then return end
+			local target=self.combat:Target(p,Config.Combat.SwordRange,false)
+			if target then
 			local other=U.root(target)
 			if other then
 				local delta=other.Position-root.Position
@@ -174,12 +206,17 @@ function Items:Use(p,aim)
 				self.combat:Knock(target,direction*Config.Combat.SwordPower+Vector3.new(0,9,0),p)
 			end
 		end
+		end)
 	elseif id=="Shield" then
 		p:SetAttribute("ShieldUntil",now+8)
 		local char=U.character(p)
 		local old=char:FindFirstChild("ArenaShield"); if old then old:Destroy() end
-		local force=Instance.new("ForceField"); force.Name="ArenaShield"; force.Visible=false; force.Parent=char
-		Debris:AddItem(force,8)
+		local hand=char:FindFirstChild("LeftHand") or char:FindFirstChild("Left Arm")
+		if hand then
+			local shield=U.part(char,"ArenaShield",Vector3.one*.1,hand.CFrame*CFrame.new(0,-hand.Size.Y*.3,-.55))
+			shield.Transparency=1; shield.CanCollide=false; shield.CanQuery=false; shield.Massless=true
+			U.weld(hand,shield); Visuals.attach(shield,"Shield"); Debris:AddItem(shield,8)
+		end
 	elseif id=="Anchor" then
 		p:SetAttribute("AnchorUntil",now+5)
 	elseif id=="Ram" then
@@ -261,7 +298,8 @@ function Items:Step(dt)
 			while left>0 and not remove do
 				local step=math.min(left,1/40); left-=step
 				local desired=targetRoot.Position+Vector3.new(0,1,0)-mace.pos
-				if desired.Magnitude<3.1 then
+				if desired.Magnitude<.05 then remove=true; break end
+				if desired.Magnitude<3.1 and workspace:Raycast(mace.pos,desired,mace.params)==nil then
 					local attackerRoot=U.root(mace.p)
 					local direction=if attackerRoot then (targetRoot.Position-attackerRoot.Position) else desired
 					local flat=Vector3.new(direction.X,0,direction.Z)
@@ -269,17 +307,33 @@ function Items:Step(dt)
 					self.fx:FireAllClients("MaceImpact",targetRoot.Position)
 					remove=true; break
 				end
-				local desiredVel=desired.Unit*Config.Combat.MaceSpeed
-				mace.vel=mace.vel:Lerp(desiredVel,math.clamp(step*6.5,0,.24))
-				local from=mace.pos; mace.pos+=mace.vel*step; mace.visualAge+=step
+				local direction=mace.vel.Unit
+				local desiredDirection=desired.Unit
+				local angle=math.acos(math.clamp(direction:Dot(desiredDirection),-1,1))
+				local turn=math.min(angle,Config.Combat.MaceTurnRate*step)
+				local axis=direction:Cross(desiredDirection)
+				if axis.Magnitude>.001 then direction=CFrame.fromAxisAngle(axis.Unit,turn):VectorToWorldSpace(direction) end
+				mace.vel=direction*Config.Combat.MaceSpeed
+				local from=mace.pos
+				local hit=workspace:Raycast(from,mace.vel*step,mace.params)
+				mace.pos=if hit then hit.Position else from+mace.vel*step
+				mace.visualAge+=step
+				if hit then
+					if hit.Instance:IsDescendantOf(U.character(mace.target)) then
+						self.combat:Knock(mace.target,direction*74+Vector3.new(0,12,0),mace.p)
+					end
+					self.fx:FireAllClients("MaceImpact",mace.pos)
+					remove=true
+				end
 				if mace.visualAge>=.045 then
-					self.fx:FireAllClients("Mace",from,mace.pos)
+					local source=U.root(mace.p)
+					self.fx:FireAllClients("Mace",from,{id=mace.id,position=mace.pos,source=if source then source.Position else from})
 					mace.visualAge=0
 				end
 				if mace.age>1.25 then remove=true end
 			end
 		elseif not remove and mace.age>1.25 then remove=true end
-		if remove then table.remove(self.maces,i) end
+		if remove then self.fx:FireAllClients("MaceEnd",mace.pos,mace.id); table.remove(self.maces,i) end
 	end
 end
 return Items

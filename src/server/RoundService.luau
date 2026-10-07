@@ -78,6 +78,7 @@ function Round:Eliminate(actor,reason)
 	local highlight=char and char:FindFirstChild("ArenaTeam"); if highlight then highlight:Destroy() end
 	local root=U.root(actor); if root then root.Anchored=false end
 	self.items:Clear(actor)
+	if self.movement then self.movement:Clear(actor) end
 	local credit=self.combat.credit[actor]
 	if credit and os.clock()-credit.time<8 and credit.player.Parent then
 		self:Award(credit.player,"KOs",1); self:Award(credit.player,"Coins",5)
@@ -105,6 +106,7 @@ function Round:AddPlayer(p)
 		if self.alive[p] then self:Eliminate(p,"ELIMINATED") end
 		if self.movement then self.movement:Clear(p) end
 		root.Anchored=false; char:PivotTo(self.arena:LobbyCFrame(p.UserId%5))
+		U.notify(self.fx,p,"LobbyView",root.CFrame)
 		hum.WalkSpeed=20; hum.UseJumpPower=true; hum.JumpPower=45
 		local force=char:FindFirstChildOfClass("ForceField"); if force then force:Destroy() end
 		hum.Died:Connect(function() if p.Character==char then self:Eliminate(p,"ELIMINATED") end end)
@@ -128,6 +130,7 @@ function Round:Cleanup()
 			root.Anchored=false; hum.PlatformStand=false; hum.AutoRotate=true
 			root.AssemblyLinearVelocity=Vector3.zero; root.AssemblyAngularVelocity=Vector3.zero
 			p.Character:PivotTo(self.arena:LobbyCFrame(p.UserId%5))
+			U.notify(self.fx,p,"LobbyView",root.CFrame)
 			local highlight=p.Character:FindFirstChild("ArenaTeam"); if highlight then highlight:Destroy() end
 		end
 	end
@@ -143,6 +146,8 @@ function Round:Cycle()
 	local map=Config.Maps[self:WinnerVote("map",#Config.Maps)]
 	self.roundId+=1; self.arena:Build(map,31415+self.roundId*71)
 	workspace:SetAttribute("MapName",map.Name); workspace:SetAttribute("RoundId",self.roundId)
+	self:SetPhase("MapSelected",.5,map.Name)
+	task.wait(.5)
 	self:SelectPads("mode",Config.Round.ModeVote)
 	local mode=Config.Modes[self:WinnerVote("mode",#Config.Modes)]
 	local humans={}
@@ -192,7 +197,8 @@ function Round:Cycle()
 		for _,actor in active do table.insert(teams,actor:GetAttribute("TeamId")) end
 		workspace:SetAttribute("Remaining",#active)
 		if Rules.shouldEnd(teams,self.initialTeams) then break end
-		self.arena:Step(math.min(dt,.1),active); self.items:Step(dt); self.bots:Step()
+		self.arena:Step(math.min(dt,.1),active); self.items:Step(dt)
+		self.movement:Step(math.min(dt,.1)); self.bots:Step()
 		if self.hazards then self.hazards:Step() end
 	end
 	local survivors=self:Active(); local team=nil; local tied=false

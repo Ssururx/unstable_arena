@@ -48,7 +48,7 @@ function Bots:Create(index)
 	crest.CanCollide=false; crest.CanQuery=false; crest.Massless=true; U.weld(head,crest)
 	local belt=U.part(rig,"LeatherBelt",Vector3.new(2.06,.28,1.05),at*CFrame.new(0,-.68,0),Color3.fromRGB(62,43,32),Enum.Material.Fabric)
 	belt.CanCollide=false; belt.CanQuery=false; belt.Massless=true; U.weld(torso,belt)
-	local humanoid=Instance.new("Humanoid"); humanoid.DisplayName=names[index].." · NPC"
+	local humanoid=Instance.new("Humanoid"); humanoid.DisplayName=(names[index] or "Gladiator").." · NPC"
 	humanoid.DisplayDistanceType=Enum.HumanoidDisplayDistanceType.Viewer; humanoid.NameDisplayDistance=35
 	humanoid.HealthDisplayType=Enum.HumanoidHealthDisplayType.AlwaysOff; humanoid.BreakJointsOnDeath=false
 	humanoid.WalkSpeed=Config.Bots.WalkSpeed; humanoid.UseJumpPower=true; humanoid.JumpPower=45; humanoid.HipHeight=0
@@ -111,6 +111,8 @@ function Bots:Step()
 			end
 		end
 
+		local threat=self.round.hazards and self.round.hazards:ThreatAt(root.Position) or Vector3.zero
+		if threat.Magnitude>.1 then desired=root.Position+threat.Unit*16 end
 		local goal=Vector3.new(desired.X-root.Position.X,0,desired.Z-root.Position.Z)
 		if goal.Magnitude<.1 then goal=Vector3.zAxis end
 		goal=goal.Unit
@@ -135,6 +137,10 @@ function Bots:Step()
 		end
 		hum:Move(heading or Vector3.zero,false)
 		if jump then hum.Jump=true end
+		if self.round.movement and heading then
+			if threat.Magnitude>8 then self.round.movement:Dash(actor,heading) end
+			if (actor:GetAttribute("Adrenaline") or 0)>=100 then self.round.movement:Adrenaline(actor) end
+		end
 
 		if target and distance<=Config.Combat.Range and os.clock()>bot.nextPush then
 			local targetOut=Vector3.new(target.Position.X-Config.Arena.Center.X,0,target.Position.Z-Config.Arena.Center.Z)
@@ -151,7 +157,13 @@ function Bots:Step()
 		if actor:GetAttribute("Item") and os.clock()>bot.nextItem then
 			bot.nextItem=os.clock()+.85+math.random()*.8
 			local id=actor:GetAttribute("Item")
-			local useNow=id~="Ram" or distance<10
+			local useNow=if id=="Sword" then distance<Config.Combat.SwordRange
+				elseif id=="Mace" then distance<Config.Combat.MaceLockRange
+				elseif id=="Bow" then distance<65
+				elseif id=="Ram" then distance<10
+				elseif id=="Brace" then under and under.stress/under.durability>.4
+				elseif id=="Shield" then distance<14 and (actor:GetAttribute("ShieldUntil") or 0)<workspace:GetServerTimeNow()
+				else distance<18
 			if useNow then self.items:Use(actor,if target then (target.Position-root.Position).Unit else goal) end
 		end
 	end

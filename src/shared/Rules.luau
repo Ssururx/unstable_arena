@@ -32,4 +32,15 @@ end
 function Rules.validNumber(n: any): boolean
 	return type(n) == "number" and n == n and math.abs(n) < 1e7
 end
+function Rules.validSlot(value: any): boolean
+	return Rules.validNumber(value) and value%1==0 and value>=1 and value<=3
+end
+-- Ballast prevents a full lobby from multiplying the early tilt to its limit.
+function Rules.balanceMoment(moment: number, weight: number, age: number, duration: number): number
+	local progress=math.clamp(age/duration,0,1)
+	return moment/(4+weight*.6)*(.45+.75*progress)
+end
+function Rules.approach(current: number, target: number, response: number, dt: number): number
+	return current+(target-current)*(1-math.exp(-response*dt))
+end
 return table.freeze(Rules)

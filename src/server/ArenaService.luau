@@ -11,7 +11,7 @@ local Arena={}; Arena.__index=Arena
 function Arena.new(fx)
 	local self=setmetatable({fx=fx,slabs={},byPart={},age=0,rng=Random.new(),dummies={},adrenalineAt={}},Arena)
 	local world=Instance.new("Model"); world.Name="UnstableArenaWorld"; world.Parent=workspace; self.world=world
-	local lobby=Coliseum.build(world); self.spawn=lobby.spawn; self.pads=lobby.pads
+	local lobby=Coliseum.build(world); self.spawn=lobby.spawn; self.pads=lobby.pads; self.header=lobby.header; self.headerHint=lobby.headerHint
 	self:MakeDummy(CFrame.new(30,134,-154)); return self
 end
 function Arena:MakeDummy(home)
@@ -39,22 +39,29 @@ function Arena:StepPractice()
 	end
 end
 function Arena:SetPadPhase(phase,counts)
+	local kind=if phase=="MapVote" then "map" elseif phase=="ModeVote" then "mode" else nil
+	self.padPhase=kind
+	self.header.Text=if kind=="map" then "CHOOSE AN ARENA" elseif kind=="mode" then "CHOOSE YOUR MODE" elseif phase=="MapSelected" then "ARENA SELECTED" else "ROMAN COLISEUM"
+	self.headerHint.Text=if kind then "STEP ON A TILE TO VOTE" elseif phase=="MapSelected" then workspace:GetAttribute("MapName") or "" else "PUSH  /  BALANCE  /  SURVIVE"
 	for _,pad in self.pads do
-		local enabled=(phase=="MapVote" and pad.kind=="map") or (phase=="ModeVote" and pad.kind=="mode")
-		pad.part.Color=if enabled then Color3.fromRGB(143,115,70) else Color3.fromRGB(85,79,68)
-		pad.part.Transparency=if enabled then 0 else .72
-		pad.edge.Transparency=if enabled then 0 else .72
-		pad.title.TextColor3=if enabled then Color3.fromRGB(246,226,179) else Color3.fromRGB(153,145,128)
-		pad.title.TextTransparency=if enabled then 0 else .78
-		for _,piece in pad.boardParts or {} do piece.Transparency=if enabled then 0 else .82 end
-		local votes=counts and counts[pad.kind] and counts[pad.kind][pad.index] or 0
-		pad.small.TextTransparency=if enabled then 0 else 1
-		pad.small.Text=if enabled then "STAND HERE  •  "..votes.." SELECTED" elseif phase=="Live" then "NEXT ROUND" else ""
+		local choice=if kind=="mode" then Config.Modes[pad.index] else Config.Maps[pad.index]
+		local enabled=kind~=nil and choice~=nil
+		pad.enabled=enabled
+		pad.part.Color=if enabled then Color3.fromRGB(101,85,60) else Color3.fromRGB(64,61,54)
+		pad.edge.Transparency=if enabled then .05 else .6
+		local name=if kind=="mode" then (if choice=="FFA" then "FREE FOR ALL" else string.upper(choice or ""))
+			else (choice and string.upper(choice.Name) or "LOCKED")
+		pad.title.Text=name
+		pad.title.TextColor3=if enabled then Color3.fromRGB(246,226,179) else Color3.fromRGB(140,133,117)
+		local votes=counts and kind and counts[kind] and counts[kind][pad.index] or 0
+		pad.small.Text=if enabled then tostring(votes).." VOTES" elseif not choice then "MORE ARENAS TO COME" else "NEXT ROUND"
+		pad.medallion.Visible=kind~="mode" and choice~=nil
+		pad.symbol.Text=if kind=="mode" then ({"I","II","IV"})[pad.index] elseif not choice then "—" else ""
 	end
 end
 function Arena:PadAt(position,kind)
 	for _,pad in self.pads do
-		if pad.kind==kind then
+		if self.padPhase==kind and pad.enabled then
 			local offset=pad.part.CFrame:PointToObjectSpace(position)
 			if math.abs(offset.X)<pad.part.Size.X/2 and math.abs(offset.Z)<pad.part.Size.Z/2 and offset.Y>=0 and offset.Y<7 then return pad.index end
 		end
@@ -63,7 +70,7 @@ function Arena:PadAt(position,kind)
 end
 function Arena:Build(map,seed)
 	if self.model then self.model:Destroy() end
-	table.clear(self.slabs); table.clear(self.byPart); table.clear(self.adrenalineAt); self.age=0; self.map=map
+	table.clear(self.slabs); table.clear(self.byPart); table.clear(self.adrenalineAt); self.age=0; self.pitch=0; self.roll=0; self.map=map
 	local model=Instance.new("Model"); model.Name="RoundArena"; model.Parent=self.world; self.model=model
 	local core=U.part(model,"Core",Vector3.new(3,2,3),CFrame.new(Config.Arena.Center))
 	core.Transparency=1; core.CanCollide=false; core.CanQuery=false; core.RootPriority=127; self.core=core
@@ -90,6 +97,17 @@ function Arena:Build(map,seed)
 		end
 		local lower={}
 		for _,v in cell.polygon do table.insert(lower,{x=cell.center.x+(v.x-cell.center.x)*.90,z=cell.center.z+(v.z-cell.center.z)*.90}) end
+		-- Keep fracture detail on the playable face; merge tiny underside edge kinks.
+		-- This removes hundreds of cosmetic wedge parts without changing collision.
+		for j=#lower,1,-1 do
+			if #lower<=3 then break end
+			local a,b,c=lower[(j-2)%#lower+1],lower[j],lower[j%#lower+1]
+			local dx,dz=c.x-a.x,c.z-a.z
+			local length=math.sqrt(dx*dx+dz*dz)
+			local t=if length>.001 then ((b.x-a.x)*dx+(b.z-a.z)*dz)/(length*length) else 0
+			local distance=if length>.001 then math.abs(dx*(b.z-a.z)-dz*(b.x-a.x))/length else 0
+			if t>0 and t<1 and distance<.42 then table.remove(lower,j) end
+		end
 		for _,p in G.polygon(slab,lower,y-3.15,1.9,color:Lerp(Color3.fromRGB(81,70,62),.45),Enum.Material.Rock) do
 			p.Massless=true; p.CanCollide=false; p.CanQuery=false; U.weld(pivot,p)
 		end
@@ -126,7 +144,7 @@ function Arena:GroundAt(position,depth)
 end
 function Arena:Under(root) return self:GroundAt(root.Position,14) end
 
-function Arena:ApplySlopePhysics(active)
+function Arena:ApplySlopePhysics(active,dt)
 	if not self.core or not self.core.Parent then return end
 
 	for _,actor in active do
@@ -163,9 +181,9 @@ function Arena:ApplySlopePhysics(active)
 		local accel=downhill*forceScale*traction
 		local v=root.AssemblyLinearVelocity
 		root.AssemblyLinearVelocity=Vector3.new(
-			v.X+accel.X*.08,
+			v.X+accel.X*dt,
 			v.Y,
-			v.Z+accel.Z*.08
+			v.Z+accel.Z*dt
 		)
 
 		if alpha>.55 then
@@ -213,16 +231,20 @@ function Arena:Step(dt,active)
 			weights[s]=(weights[s] or 0)+hw
 		end
 	end
-	local intensity=math.clamp(self.age/(self.map.Duration*.78),0,1)
-	local chaos=1+intensity*.24
+	local totalWeight=0
+	for _,weight in weights do totalWeight+=weight end
+	local intensity=math.clamp(self.age/self.map.Duration,0,1)
+	local chaos=.35+intensity*.9
 	local pitch,roll=Rules.limitTilt(
-		tz*Config.Arena.TiltPerStud*chaos+math.sin(self.age*1.4)*self.map.Wave*chaos,
-		-tx*Config.Arena.TiltPerStud*chaos+math.sin(self.age*.9+1)*self.map.Wave*chaos,
+		Rules.balanceMoment(tz,totalWeight,self.age,self.map.Duration)*Config.Arena.TiltPerStud+math.sin(self.age*.38)*self.map.Wave*chaos,
+		-Rules.balanceMoment(tx,totalWeight,self.age,self.map.Duration)*Config.Arena.TiltPerStud+math.sin(self.age*.29+1)*self.map.Wave*chaos,
 		Config.Arena.MaxTilt
 	)
-	self.orientation.CFrame=CFrame.Angles(math.rad(pitch),0,math.rad(roll))
+	self.pitch=Rules.approach(self.pitch or 0,pitch,1.3,dt)
+	self.roll=Rules.approach(self.roll or 0,roll,1.3,dt)
+	self.orientation.CFrame=CFrame.Angles(math.rad(self.pitch),0,math.rad(self.roll))
 	local tilt=math.sqrt(pitch*pitch+roll*roll)/Config.Arena.MaxTilt
-	self:ApplySlopePhysics(active)
+	self:ApplySlopePhysics(active,dt)
 	for _,s in self.slabs do
 		if s.broken then continue end
 		if self.age>Config.Slabs.Grace then s.stress+=Rules.stressRate(weights[s] or 0,tilt,self.age,self.map.Duration)*dt end

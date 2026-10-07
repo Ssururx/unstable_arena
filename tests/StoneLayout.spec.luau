@@ -3,9 +3,11 @@ local Stone=require("../src/shared/StoneLayout")
 local Rules=require("../src/shared/Rules")
 local checks=0
 local function check(condition:boolean,message:string) checks+=1; assert(condition,message) end
+for _,spec in {{52,38},{110,84}} do
 for _,seed in {31415,31486,1,123456,987654} do
-	local cells=Stone.build(52,38,seed)
-	check(#cells==38,"Stone count")
+	local radius,count=spec[1],spec[2]
+	local cells=Stone.build(radius,count,seed)
+	check(#cells==count,"Stone count")
 	local total=0
 	for i,cell in cells do
 		check(cell.area>65,"No tiny unplayable stones")
@@ -19,13 +21,14 @@ for _,seed in {31415,31486,1,123456,987654} do
 			triangles+=area
 		end
 		check(math.abs(triangles-cell.area)<1e-4,"Triangle prisms cover polygon area")
-		for _,p in cell.polygon do check(math.sqrt(p.x*p.x+p.z*p.z)<54,"Stone stays inside circular boundary") end
+		for _,p in cell.polygon do check(math.sqrt(p.x*p.x+p.z*p.z)<radius*1.04,"Stone stays inside circular boundary") end
 		for j,other in cells do
 			if i~=j then check(not Stone.contains(other.polygon,cell.center),"Distinct stone interiors") end
 		end
 		total+=cell.area
 	end
-	check(total>7400 and total<8500,"Near-circular area, approximately 2x old width")
+	check(total>math.pi*radius*radius*.87 and total<math.pi*radius*radius,"Near-circular area")
+end
 end
 check(Rules.botCount(0,"FFA",6,7)==0,"No bots without humans")
 check(Rules.botCount(1,"FFA",6,7)==5,"Solo gets five opponents")

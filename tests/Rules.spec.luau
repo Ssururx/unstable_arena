@@ -45,4 +45,33 @@ for _,duration in {65,85} do
 	end
 	check(breakAt > 7 and breakAt < duration,"Empty slabs force a finish before timer expires")
 end
+for _,bad in {0,4,-1,1.5,math.huge,-math.huge,0/0,"1",false} do
+	check(not Rules.validSlot(bad),"Malformed inventory selection rejected")
+end
+for slot=1,3 do check(Rules.validSlot(slot),"Three valid inventory indices") end
+check(Rules.balanceMoment(0,8,20,175)==0,"Balanced crowd causes no directional tilt")
+local early=Rules.balanceMoment(8*90,8,10,175)*.16
+local late=Rules.balanceMoment(8*90,8,160,175)*.16
+check(early<7,"Crowd on one side does not saturate tilt early")
+check(late>early and late<26,"Danger grows gradually within the tilt limit")
+local function responseAt(fps:number):number
+	local value=0
+	for _=1,fps*3 do value=Rules.approach(value,15,1.3,1/fps) end
+	return value
+end
+check(math.abs(responseAt(30)-responseAt(144))<1e-6,"Balance smoothing is frame-rate independent")
+local idleStress=0
+local occupiedStress=0
+local idleBreak=0
+for tick=1,1750 do
+	local age=tick/10
+	if age>14 then
+		idleStress+=Rules.stressRate(0,.2,age,175)*.1
+		occupiedStress+=Rules.stressRate(1,.2,age,175)*.1
+	end
+	if idleStress>=52 and idleBreak==0 then idleBreak=age end
+	if age==60 then check(idleStress<15,"Opening does not destroy empty slabs") end
+end
+check(idleBreak>100 and idleBreak<175,"Final-minute pressure closes empty safe areas")
+check(occupiedStress>idleStress,"Remaining on one stone wears it faster")
 print("PASS: "..checks.." rule assertions")

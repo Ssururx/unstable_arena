@@ -1,14 +1,14 @@
 --!strict
 return table.freeze({
-	Version = "0.5.0-competition",
+	Version = "0.6.0-arena-polish",
 	Arena = {
 		Center = Vector3.new(0, 122, 0),
 		Radius = 110,
 		SlabCount = 84,
 		MaxTilt = 26,
-		Response = 22,
-		AngularSpeed = 2.5,
-		TiltPerStud = 0.082,
+		Response = 12,
+		AngularSpeed = 0.6,
+		TiltPerStud = 0.16,
 		LobbyRadius = 190,
 		VoidY = 28,
 		EliminationRadius = 148,
@@ -30,6 +30,8 @@ return table.freeze({
 		SwordPower = 48,
 		MaceLockRange = 32,
 		MaceSpeed = 78,
+		MaceTurnRate = 1.8,
+		MaceWarning = 0.45,
 	},
 	Movement = {
 		WalkSpeed = 20,

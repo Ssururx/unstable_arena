@@ -7,6 +7,8 @@ local GuiService=game:GetService("GuiService")
 local TweenService=game:GetService("TweenService")
 local Debris=game:GetService("Debris")
 local CollectionService=game:GetService("CollectionService")
+local Hotbar=require(script.Hotbar)
+require(script.CombatAnimation).start()
 local Config=require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
 local player=Players.LocalPlayer
 local remotes=ReplicatedStorage:WaitForChild("Remotes")
@@ -53,6 +55,7 @@ local function toast(message)
 end
 local cooldown={}
 local following=nil; local firstPerson=false; local wantLock=false; local locked=false
+local sprintToggle=false
 local actionPanel=panel("Actions",UDim2.fromOffset(278,76),UDim2.fromScale(.98,.70),Vector2.new(1,1))
 local actionButtons={}
 local function send(kind)
@@ -72,28 +75,30 @@ actionButtons.Push=button(actionPanel,"PUSH\nE / Click",UDim2.fromOffset(88,62),
 actionButtons.Grab=button(actionPanel,"GRAB\nQ",UDim2.fromOffset(80,62),UDim2.fromOffset(99,7),function() send("Grab") end)
 actionButtons.UseItem=button(actionPanel,"ITEM\nF",UDim2.fromOffset(88,62),UDim2.fromOffset(184,7),function() send("UseItem") end)
 for _,b in actionButtons do b.TextWrapped=true end
-local inventory=panel("Inventory",UDim2.fromOffset(430,92),UDim2.fromScale(.5,.985),Vector2.new(.5,1))
-inventory.BackgroundTransparency=.22
-local itemHint=label(inventory,"R / Y pickup  •  1–3 select  •  F use",UDim2.new(1,-12,0,20),UDim2.fromOffset(6,2),11)
-itemHint.TextColor3=Color3.fromRGB(205,195,175)
-local slotButtons={}; local slotStrokes={}
-for i=1,3 do
-	local slot=i
-	local x=8+(i-1)*139
-	local b=button(inventory,tostring(i).."  EMPTY",UDim2.fromOffset(132,60),UDim2.fromOffset(x,25),function()
-		action:FireServer("SelectSlot",slot)
-	end)
-	b.TextSize=13; b.TextWrapped=true
-	local stroke=Instance.new("UIStroke"); stroke.Thickness=1.5; stroke.Transparency=.5; stroke.Color=colors.gold; stroke.Parent=b
-	slotButtons[i]=b; slotStrokes[i]=stroke
-end
-local adrenaline=panel("Adrenaline",UDim2.fromOffset(320,28),UDim2.fromScale(.5,.82),Vector2.new(.5,1))
-adrenaline.BackgroundTransparency=.18
-local adrenalineTrack=Instance.new("Frame"); adrenalineTrack.Size=UDim2.new(1,-8,1,-8); adrenalineTrack.Position=UDim2.fromOffset(4,4)
-adrenalineTrack.BackgroundColor3=Color3.fromRGB(45,43,39); adrenalineTrack.BorderSizePixel=0; adrenalineTrack.Parent=adrenaline; roundCorner(adrenalineTrack,7)
+local mobility=panel("Mobility",UDim2.fromOffset(278,55),UDim2.fromScale(.98,.54),Vector2.new(1,1))
+mobility.BackgroundTransparency=1
+button(mobility,"DASH",UDim2.fromOffset(86,48),UDim2.new(),function() send("Dash") end)
+button(mobility,"SLIDE",UDim2.fromOffset(86,48),UDim2.fromOffset(94,0),function() send("Slide") end)
+button(mobility,"SPRINT",UDim2.fromOffset(86,48),UDim2.fromOffset(188,0),function()
+	sprintToggle=not sprintToggle; action:FireServer("Sprint",sprintToggle)
+end)
+local inventory=panel("Inventory",UDim2.fromOffset(224,68),UDim2.new(.5,0,1,-18),Vector2.new(.5,1))
+inventory.BackgroundTransparency=1
+local itemHint=label(inventory,"",UDim2.fromOffset(380,20),UDim2.fromOffset(-78,-26),11)
+itemHint.TextColor3=Color3.fromRGB(222,210,185)
+local slotButtons=Hotbar.build(inventory,function(slot)
+	if not following and not GuiService.MenuIsOpen then action:FireServer("SelectSlot",slot) end
+end)
+local adrenaline=panel("Adrenaline",UDim2.fromOffset(224,5),UDim2.new(.5,0,1,-122),Vector2.new(.5,1))
+adrenaline.BackgroundTransparency=.4
+local adrenalineTrack=Instance.new("Frame"); adrenalineTrack.Size=UDim2.fromScale(1,1)
+adrenalineTrack.BackgroundColor3=Color3.fromRGB(45,43,39); adrenalineTrack.BorderSizePixel=0; adrenalineTrack.Parent=adrenaline; roundCorner(adrenalineTrack,3)
 local adrenalineFill=Instance.new("Frame"); adrenalineFill.Size=UDim2.fromScale(0,1); adrenalineFill.BackgroundColor3=Color3.fromRGB(202,118,58)
-adrenalineFill.BorderSizePixel=0; adrenalineFill.Parent=adrenalineTrack; roundCorner(adrenalineFill,7)
-local adrenalineText=label(adrenalineTrack,"ADRENALINE 0%",UDim2.fromScale(1,1),UDim2.new(),11)
+adrenalineFill.BorderSizePixel=0; adrenalineFill.Parent=adrenalineTrack; roundCorner(adrenalineFill,3)
+local adrenalineText=label(adrenalineTrack,"",UDim2.new(1,0,0,18),UDim2.fromOffset(0,-21),10)
+local rushButton=Instance.new("TextButton"); rushButton.Size=UDim2.new(1,0,0,30)
+rushButton.Position=UDim2.fromOffset(0,-25); rushButton.BackgroundTransparency=1; rushButton.Text=""
+rushButton.Parent=adrenaline; rushButton.Activated:Connect(function() send("Adrenaline") end)
 local hazardPanel=panel("Hazard",UDim2.fromOffset(420,32),UDim2.fromScale(.5,.115),Vector2.new(.5,0))
 hazardPanel.Visible=false; hazardPanel.BackgroundTransparency=.16
 local hazardText=label(hazardPanel,"",UDim2.new(1,-12,1,0),UDim2.fromOffset(6,0),13)
@@ -102,7 +107,7 @@ crosshair.TextTransparency=.15
 local lockPanel=panel("Lock",UDim2.fromOffset(190,32),UDim2.fromScale(.02,.97),Vector2.new(0,1))
 local lockButton=button(lockPanel,"RSHIFT LOCK: OFF",UDim2.fromScale(1,1),UDim2.new(),function() wantLock=not wantLock end)
 lockPanel.BackgroundTransparency=1; lockButton.BackgroundTransparency=.35
-local controlHint=label(gui,"E PUSH  •  Q GRAB  •  F USE  •  SHIFT SPRINT  •  X DASH  •  C SLIDE  •  G RUSH",UDim2.fromOffset(670,22),UDim2.new(.5,-335,1,-120),11)
+local controlHint=label(gui,"E PUSH  •  Q GRAB  •  F USE  •  SHIFT SPRINT  •  X DASH  •  C SLIDE  •  G RUSH",UDim2.fromOffset(650,22),UDim2.new(.5,-325,1,-167),11)
 local spec=panel("Spectator",UDim2.fromOffset(450,88),UDim2.fromScale(.5,.82),Vector2.new(.5,1))
 local specTitle=label(spec,"WATCH FROM THE STANDS",UDim2.new(1,-12,0,26),UDim2.fromOffset(6,3),14)
 local function character(actor) return if actor:IsA("Player") then actor.Character else actor end
@@ -145,6 +150,12 @@ UIS.InputBegan:Connect(function(input,processed)
 	elseif key == Enum.KeyCode.One then action:FireServer("SelectSlot",1)
 	elseif key == Enum.KeyCode.Two then action:FireServer("SelectSlot",2)
 	elseif key == Enum.KeyCode.Three then action:FireServer("SelectSlot",3)
+	elseif key==Enum.KeyCode.ButtonR1 or key==Enum.KeyCode.ButtonL1 then
+		local delta=if key==Enum.KeyCode.ButtonR1 then 1 else -1
+		action:FireServer("SelectSlot",((player:GetAttribute("ActiveSlot") or 1)-1+delta)%3+1)
+	elseif key==Enum.KeyCode.ButtonL3 then sprintToggle=not sprintToggle; action:FireServer("Sprint",sprintToggle)
+	elseif key==Enum.KeyCode.DPadDown then send("Adrenaline")
+	elseif key==Enum.KeyCode.ButtonR3 then send("Slide")
 	elseif key == Enum.KeyCode.X or key == Enum.KeyCode.ButtonB then send("Dash")
 	elseif key == Enum.KeyCode.C then send("Slide")
 	elseif key == Enum.KeyCode.G then send("Adrenaline")
@@ -153,81 +164,45 @@ UIS.InputBegan:Connect(function(input,processed)
 	elseif key == Enum.KeyCode.F or key == Enum.KeyCode.ButtonL2 then send("UseItem")
 	end
 end)
+UIS.WindowFocusReleased:Connect(function() action:FireServer("Sprint",false) end)
+GuiService.MenuOpened:Connect(function() action:FireServer("Sprint",false) end)
 UIS.InputEnded:Connect(function(input)
 	if input.KeyCode == Enum.KeyCode.LeftShift then action:FireServer("Sprint",false) end
 end)
 player.CharacterAdded:Connect(function() restoreCamera(); wantLock=false; action:FireServer("Sprint",false) end)
 local effects=Instance.new("Folder"); effects.Name="ArenaLocalEffects"; effects.Parent=workspace
-local maceRange=Instance.new("Part"); maceRange.Name="MaceRange"; maceRange.Anchored=true
-maceRange.CanCollide=false; maceRange.CanTouch=false; maceRange.CanQuery=false
-maceRange.Shape=Enum.PartType.Cylinder; maceRange.Material=Enum.Material.Neon
-maceRange.Color=Color3.fromRGB(205,156,83); maceRange.Transparency=1
-maceRange.Size=Vector3.new(.05,Config.Combat.MaceLockRange*2,Config.Combat.MaceLockRange*2); maceRange.Parent=effects
-local animatedBots={}
-local function registerBot(bot)
-	task.spawn(function()
-		local torso=bot:WaitForChild("Torso",5); if not torso then return end
-		local joints={}
-		for _,name in {"Left Hip","Right Hip","Left Shoulder","Right Shoulder"} do
-			local joint=torso:WaitForChild(name,5); if joint then joints[name]=joint end
-		end
-		if bot.Parent and CollectionService:HasTag(bot,"ArenaBot") then animatedBots[bot]=joints end
-	end)
+local rangeSegments={}
+for i=1,48 do
+	local p=Instance.new("Part"); p.Name="MaceRangeEdge"; p.Anchored=true
+	p.CanCollide=false; p.CanQuery=false; p.CanTouch=false; p.CastShadow=false
+	p.Material=Enum.Material.Neon; p.Color=colors.gold; p.Transparency=1; p.Parent=effects
+	rangeSegments[i]=p
 end
-for _,bot in CollectionService:GetTagged("ArenaBot") do registerBot(bot) end
-CollectionService:GetInstanceAddedSignal("ArenaBot"):Connect(registerBot)
-CollectionService:GetInstanceRemovedSignal("ArenaBot"):Connect(function(bot) animatedBots[bot]=nil end)
-
-local playerRig={character=nil,joints={}}
-local function playerJoints()
-	local char=player.Character
-	if char~=playerRig.character then
-		playerRig.character=char
-		playerRig.joints={}
-		if char then
-			for _,d in char:GetDescendants() do
-				if d:IsA("Motor6D") then
-					local n=string.lower(d.Name)
-					if string.find(n,"shoulder") or string.find(n,"waist") or string.find(n,"rootjoint") then
-						playerRig.joints[d.Name]=d
-					end
-				end
-			end
-		end
-	end
-	return playerRig.joints
-end
-
-local function actionPose(joints,actor,walkAmount,phase)
-	local now=workspace:GetServerTimeNow()
-	local swinging=(actor:GetAttribute("SwingUntil") or 0)>now
-	local grabbing=(actor:GetAttribute("GrabUntil") or 0)>now
-	local picking=(actor:GetAttribute("PickupUntil") or 0)>now
-	local using=(actor:GetAttribute("ItemActionUntil") or 0)>now
-	for name,joint in joints do
-		local lower=string.lower(name)
-		local left=string.find(lower,"left")~=nil
-		local shoulder=string.find(lower,"shoulder")~=nil
-		local waist=string.find(lower,"waist")~=nil or string.find(lower,"rootjoint")~=nil
-		local target=CFrame.identity
-		if shoulder then
-			local stride=math.sin(phase)*(if left then 1 else -1)*.34*walkAmount
-			target=CFrame.Angles(stride,0,0)
-			if swinging then
-				if left then target=CFrame.Angles(-.35,0,-.18) else target=CFrame.Angles(-1.28,0,.12) end
-			elseif grabbing then
-				target=CFrame.Angles(-1.02,0,if left then -.18 else .18)
-			elseif picking then
-				target=CFrame.Angles(-.82,0,if left then -.12 else .12)
-			elseif using then
-				target=CFrame.Angles(if left then -.55 else -1.0,0,if left then -.08 else .1)
-			end
-		elseif waist and (swinging or grabbing or picking or using) then
-			target=CFrame.Angles(if picking then .13 else -.08,0,if swinging then -.12 else 0)
-		end
-		joint.Transform=joint.Transform:Lerp(target,.28)
+local rangeAt=0
+local function updateRange(root,visible)
+	if not visible then for _,p in rangeSegments do p.Transparency=1 end; return end
+	if os.clock()<rangeAt then return end
+	rangeAt=os.clock()+.05
+	local world=workspace:FindFirstChild("UnstableArenaWorld")
+	local arena=world and world:FindFirstChild("RoundArena")
+	if not arena then return end
+	local params=RaycastParams.new(); params.FilterType=Enum.RaycastFilterType.Include; params.FilterDescendantsInstances={arena}
+	local radius=Config.Combat.MaceLockRange
+	for i,p in rangeSegments do
+		local angle=(i-1)/#rangeSegments*math.pi*2
+		local offset=Vector3.new(math.sin(angle),0,math.cos(angle))*radius
+		local hit=workspace:Raycast(root.Position+offset+Vector3.new(0,35,0),Vector3.new(0,-75,0),params)
+		if hit and not hit.Instance.Parent:GetAttribute("Broken") then
+			p.Size=Vector3.new(.12,.04,radius*math.pi*2/#rangeSegments*.74)
+			local tangent=Vector3.new(math.cos(angle),0,-math.sin(angle))
+			tangent=(tangent-hit.Normal*tangent:Dot(hit.Normal)).Unit
+			p.CFrame=CFrame.lookAt(hit.Position+hit.Normal*.12,hit.Position+hit.Normal*.12+tangent,hit.Normal)
+			p.Transparency=.30
+		else p.Transparency=1 end
 	end
 end
+local flyingMaces={}
+local hitUntil=0
 local function effect(kind,a,b)
 	local camera=workspace.CurrentCamera
 	if typeof(a)~="Vector3" or not camera or (camera.CFrame.Position-a).Magnitude>420 or #effects:GetChildren()>=120 then return end
@@ -258,15 +233,28 @@ local function effect(kind,a,b)
 		emitter.Parent=p; emitter:Emit(count or 8); Debris:AddItem(p,.9)
 	end
 
-	if kind=="DangerCircle" then
-		local radius=if typeof(b)=="number" then b else 6
-		local ring=basePart(); ring.Name="DangerTelegraph"; ring.Shape=Enum.PartType.Cylinder
-		ring.Material=Enum.Material.Neon; ring.Color=Color3.fromRGB(231,108,66); ring.Transparency=.45
-		ring.Size=Vector3.new(.07,radius*2,radius*2)
-		ring.CFrame=CFrame.new(a-Vector3.new(0,2.7,0))*CFrame.Angles(0,0,math.pi/2)
-		local pulse=TweenService:Create(ring,TweenInfo.new(.55,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut,-1,true),{Transparency=.12})
-		pulse:Play(); Debris:AddItem(ring,1.2)
-		return
+	if kind=="DangerCircle" or kind=="MaceWarning" then
+		local radius=if kind=="MaceWarning" then 4 else (if typeof(b)=="number" then b else 12)
+		local duration=if kind=="MaceWarning" then b else 1.15
+		local world=workspace:FindFirstChild("UnstableArenaWorld")
+		local arena=world and world:FindFirstChild("RoundArena"); if not arena then return end
+		local params=RaycastParams.new(); params.FilterType=Enum.RaycastFilterType.Include; params.FilterDescendantsInstances={arena}
+		local marker=Instance.new("Model"); marker.Name="WarningRing"; marker.Parent=effects
+		for i=0,23 do
+			local angle=i/24*math.pi*2
+			local point=a+Vector3.new(math.sin(angle)*radius,18,math.cos(angle)*radius)
+			local hit=workspace:Raycast(point,Vector3.new(0,-45,0),params)
+			if hit then
+				local ring=basePart(); ring.Parent=marker; ring.Material=Enum.Material.Neon
+				ring.Color=Color3.fromRGB(240,134,65); ring.Transparency=.15
+				ring.Size=Vector3.new(.23,.06,radius*math.pi*2/24*.8)
+				local tangent=Vector3.new(math.cos(angle),0,-math.sin(angle))
+				tangent=(tangent-hit.Normal*tangent:Dot(hit.Normal)).Unit
+				ring.CFrame=CFrame.lookAt(hit.Position+hit.Normal*.15,hit.Position+hit.Normal*.15+tangent,hit.Normal)
+				TweenService:Create(ring,TweenInfo.new(duration),{Color=Color3.fromRGB(255,63,40)}):Play()
+			end
+		end
+		Debris:AddItem(marker,duration); return
 	elseif kind=="MeteorIncoming" and typeof(b)=="Vector3" then
 		local rock=basePart(); rock.Shape=Enum.PartType.Ball; rock.Size=Vector3.one*3.8
 		rock.Material=Enum.Material.Rock; rock.Color=Color3.fromRGB(83,55,40); rock.Position=a
@@ -275,8 +263,31 @@ local function effect(kind,a,b)
 		Debris:AddItem(rock,1.18); return
 	elseif kind=="MeteorImpact" then
 		burst(a,Color3.fromRGB(225,119,58),24,4.5); return
-	elseif kind=="Mace" then
-		line(a,b,.42,Color3.fromRGB(201,151,79),.1); return
+	elseif kind=="Mace" and typeof(b)=="table" then
+		local projectile=flyingMaces[b.id]
+		if not projectile or not projectile.head.Parent then
+			local model=Instance.new("Model"); model.Name="ThrownMace"; model.Parent=effects
+			local head=basePart(); head.Parent=model; head.Name="IronHead"; head.Transparency=0
+			head.Material=Enum.Material.Metal; head.Color=Color3.fromRGB(78,81,79)
+			head.Shape=Enum.PartType.Ball; head.Size=Vector3.one*1.25; head.Position=a
+			local source=basePart(); source.Parent=model; source.Transparency=1; source.Size=Vector3.one*.1
+			local from=Instance.new("Attachment"); from.Parent=source
+			local to=Instance.new("Attachment"); to.Parent=head
+			local chain=Instance.new("Beam"); chain.Attachment0=from; chain.Attachment1=to
+			chain.Width0=.10; chain.Width1=.10; chain.FaceCamera=true
+			chain.Color=ColorSequence.new(Color3.fromRGB(138,128,100)); chain.Segments=10
+			chain.CurveSize0=-1; chain.CurveSize1=1; chain.Parent=head
+			projectile={model=model,head=head,source=source}; flyingMaces[b.id]=projectile
+			Debris:AddItem(model,2)
+			task.delay(2,function() if flyingMaces[b.id]==projectile then flyingMaces[b.id]=nil end end)
+		end
+		projectile.source.Position=b.source
+		TweenService:Create(projectile.head,TweenInfo.new(.055,Enum.EasingStyle.Linear),{Position=b.position}):Play()
+		return
+	elseif kind=="MaceEnd" then
+		local projectile=flyingMaces[b]
+		if projectile then projectile.model:Destroy(); flyingMaces[b]=nil end
+		return
 	elseif kind=="MaceImpact" then
 		burst(a,Color3.fromRGB(180,139,78),12,2.3); return
 	elseif kind=="Arrow" then
@@ -312,48 +323,66 @@ local function effect(kind,a,b)
 	Debris:AddItem(part,.8)
 end
 fx.OnClientEvent:Connect(function(kind,a,b)
-	if kind == "Toast" then toast(a)
+	if kind == "LobbyView" and typeof(a)=="CFrame" then
+		local camera=workspace.CurrentCamera
+		if camera and not player:GetAttribute("InRound") then
+			restoreCamera()
+			camera.CFrame=CFrame.lookAt(a.Position-a.LookVector*12+Vector3.new(0,5,0),a.Position+a.LookVector*18+Vector3.new(0,2,0))
+		end
+	elseif kind == "Toast" then toast(a)
 	elseif kind == "Cooldown" then cooldown[a]=os.clock()+b
+	elseif kind == "ConfirmHit" then hitUntil=os.clock()+.16
+	elseif kind == "Pickup" then
+		local slot=slotButtons[b]
+		if slot then slot.stroke.Color=Color3.fromRGB(255,244,214); TweenService:Create(slot.stroke,TweenInfo.new(.5),{Color=colors.gold}):Play() end
 	else effect(kind,a,b) end
 end)
+local voteHighlight=Instance.new("Highlight"); voteHighlight.Name="MyVote"; voteHighlight.FillTransparency=.88
+voteHighlight.FillColor=colors.gold; voteHighlight.OutlineColor=colors.gold; voteHighlight.OutlineTransparency=.12
+voteHighlight.DepthMode=Enum.HighlightDepthMode.Occluded; voteHighlight.Enabled=false; voteHighlight.Parent=workspace
 local function updateUI()
 	local camera=workspace.CurrentCamera; if not camera then return end
 	local scale=math.min(1,camera.ViewportSize.X/620,camera.ViewportSize.Y/560)
 	for _,s in scales do s.Scale=scale end
+	if UIS.TouchEnabled then
+		inventory:FindFirstChildOfClass("UIScale").Scale=math.max(.8,scale)
+	end
 	local phase=workspace:GetAttribute("Phase") or "Waiting"
 	local active=player:GetAttribute("InRound") == true
+	local voteKind=if phase=="MapVote" then "map" elseif phase=="ModeVote" then "mode" else nil
+	local vote=voteKind and player:GetAttribute("Selected"..voteKind)
+	voteHighlight.Enabled=false
+	local world=workspace:FindFirstChild("UnstableArenaWorld")
+	local lobby=world and world:FindFirstChild("LobbyCourtyard")
+	local gallery=lobby and lobby:FindFirstChild("VotingGallery")
+	if vote and gallery then
+		for _,part in gallery:GetChildren() do
+			if part:GetAttribute("VoteIndex")==vote then voteHighlight.Adornee=part; voteHighlight.Enabled=true; break end
+		end
+	end
 	spec.Visible=phase == "Live" and not active
 	if following and not spec.Visible then restoreCamera() end
 	local seconds=math.max(0,math.ceil((workspace:GetAttribute("EndsAt") or 0)-workspace:GetServerTimeNow()))
-	timer.Text=if phase == "Waiting" then "—" else tostring(seconds)
-	title.Text=if phase == "Countdown" then "GET READY" elseif phase == "Results" then "ROUND OVER" else "ROMAN COLISEUM"
+	timer.Text=if phase == "Waiting" then "—" else string.format("%d:%02d",math.floor(seconds/60),seconds%60)
+	title.Text=if phase == "Countdown" then "GET READY" elseif phase == "Results" then (workspace:GetAttribute("Message") or "ROUND OVER") else "ROMAN COLISEUM"
 	if phase == "Live" then
 		subtitle.Text=(workspace:GetAttribute("Mode") or "FFA").." • "..tostring(workspace:GetAttribute("Remaining") or 0).." remaining"
 	else subtitle.Text=workspace:GetAttribute("Message") or "" end
 	local id=player:GetAttribute("Item"); local def=Config.Items[id]
 	local now=workspace:GetServerTimeNow()
-	local activeSlot=player:GetAttribute("ActiveSlot") or 1
-	for i=1,3 do
-		local slotId=player:GetAttribute("Inventory"..i)
-		local uses=player:GetAttribute("Inventory"..i.."Uses") or 0
-		local slotDef=Config.Items[slotId]
-		slotButtons[i].Text=tostring(i).."  "..(slotDef and (string.upper(slotDef.Name).."  ×"..uses) or "EMPTY")
-		slotButtons[i].TextColor3=slotDef and slotDef.Color or Color3.fromRGB(164,157,144)
-		slotButtons[i].BackgroundColor3=if i==activeSlot then Color3.fromRGB(77,67,50) else colors.soft
-		slotStrokes[i].Transparency=if i==activeSlot then .05 else .72
-		slotStrokes[i].Thickness=if i==activeSlot then 2.5 else 1
-	end
-	if (player:GetAttribute("ShieldUntil") or 0)>now then itemHint.Text="SHIELD ACTIVE  •  next hit blocked"
-	elseif (player:GetAttribute("AnchorUntil") or 0)>now then itemHint.Text="ANCHORED  •  reduced knockback"
-	elseif def then itemHint.Text=def.Hint.."  •  F to use"
-	else itemHint.Text="R / Y pickup  •  1–3 select  •  max 3 items" end
+	Hotbar.update(slotButtons,player,UIS.TouchEnabled)
+	if (player:GetAttribute("ShieldUntil") or 0)>now then itemHint.Text="SHIELD RAISED"
+	elseif (player:GetAttribute("AnchorUntil") or 0)>now then itemHint.Text="ANCHORED"
+	elseif def then itemHint.Text=string.upper(def.Name)..(if UIS.TouchEnabled then " · TAP ITEM" else " · F TO USE")
+	else itemHint.Text="" end
 	inventory.Visible=active
 	local adrenalineValue=math.clamp(player:GetAttribute("Adrenaline") or 0,0,Config.Adrenaline.Max)
 	adrenaline.Visible=active
 	adrenalineFill.Size=UDim2.fromScale(adrenalineValue/Config.Adrenaline.Max,1)
+	adrenalineFill.BackgroundColor3=if adrenalineValue>=100 then colors.gold else Color3.fromRGB(202,118,58)
 	adrenalineText.Text=if (player:GetAttribute("AdrenalineUntil") or 0)>now then "ADRENALINE RUSH"
-		elseif adrenalineValue>=Config.Adrenaline.Max then "ADRENALINE READY  •  G"
-		else "ADRENALINE  "..math.floor(adrenalineValue).."%"
+		elseif adrenalineValue>=Config.Adrenaline.Max then (if UIS.TouchEnabled then "TAP FOR ADRENALINE RUSH" elseif UIS:GetLastInputType()==Enum.UserInputType.Gamepad1 then "RUSH · D-PAD DOWN" else "ADRENALINE READY · G")
+		else "ADRENALINE"
 	local hazard=workspace:GetAttribute("Hazard") or ""
 	local hazardActiveAt=workspace:GetAttribute("HazardActiveAt") or 0
 	local hazardCountdown=math.max(0,math.ceil(hazardActiveAt-now))
@@ -372,10 +401,11 @@ local function updateUI()
 	-- On narrow screens, avoid covering the main round banner.
 	stats.Position=if camera.ViewportSize.X < 1000 then UDim2.fromScale(.02,.17) else UDim2.fromScale(.02,.02)
 	stats.Visible=active and not toastPanel.Visible and camera.ViewportSize.X>800
+	mobility.Visible=UIS.TouchEnabled and active and phase=="Live" and not following
 	actionPanel.Visible=UIS.TouchEnabled and not following and phase~="Countdown" and phase~="Results"
 	controlHint.Visible=not UIS.TouchEnabled and active and not following
 	local pushWait=math.max(0,(cooldown.Push or 0)-os.clock())
-	controlHint.Text=if UIS.GamepadEnabled and not UIS.KeyboardEnabled then "R2 PUSH  •  X GRAB  •  L2 ITEM  •  B DASH"
+	controlHint.Text=if UIS:GetLastInputType()==Enum.UserInputType.Gamepad1 then "R2 PUSH  •  X GRAB  •  L2 ITEM  •  B DASH"
 		elseif pushWait>0 then string.format("PUSH %.1fs  •  Q GRAB  •  F USE  •  SHIFT SPRINT  •  X DASH  •  C SLIDE  •  G RUSH",pushWait)
 		else "E PUSH  •  Q GRAB  •  F USE  •  SHIFT SPRINT  •  X DASH  •  C SLIDE  •  G RUSH"
 	local texts=if UIS.TouchEnabled then {Push="PUSH",Grab="GRAB",UseItem="ITEM"}
@@ -388,7 +418,9 @@ local function updateUI()
 	end
 	lockButton.Text=if locked then "RSHIFT LOCK: ON" else "RSHIFT LOCK: OFF"
 	lockPanel.Visible=UIS.MouseEnabled and not following
-	crosshair.Visible=locked or ((id=="Bow" or id=="Mace") and active and not following)
+	crosshair.Text=if os.clock()<hitUntil then "×" else "+"
+	crosshair.TextColor3=if os.clock()<hitUntil then colors.gold else colors.text
+	crosshair.Visible=os.clock()<hitUntil or locked or ((id=="Bow" or id=="Mace") and active and not following)
 	povButton.Text=if firstPerson then "POV: FIRST" else "POV: THIRD"
 	specTitle.Text=if following then "WATCHING "..actorName(following) else "WATCH FROM THE STANDS"
 end
@@ -401,27 +433,9 @@ RunService:BindToRenderStep("UnstableCamera",Enum.RenderPriority.Camera.Value+1,
 	local char=player.Character; local hum=char and char:FindFirstChildOfClass("Humanoid")
 	local root=char and char:FindFirstChild("HumanoidRootPart")
 	if hum and root then
-		local speed=Vector3.new(root.AssemblyLinearVelocity.X,0,root.AssemblyLinearVelocity.Z).Magnitude
-		actionPose(playerJoints(),player,math.clamp(speed/20,0,1),os.clock()*10)
 		local showRange=player:GetAttribute("InRound")==true and player:GetAttribute("Item")=="Mace"
-		if showRange then
-			maceRange.Transparency=.82
-			maceRange.CFrame=CFrame.new(root.Position-Vector3.new(0,2.8,0))*CFrame.Angles(0,0,math.pi/2)
-		else maceRange.Transparency=1 end
-	else maceRange.Transparency=1 end
-	for bot,joints in animatedBots do
-		local botRoot=bot:FindFirstChild("HumanoidRootPart")
-		local botHum=bot:FindFirstChildOfClass("Humanoid")
-		if botRoot and botHum then
-			local moving=botHum.MoveDirection.Magnitude
-			-- Animation is cosmetic and local; combat and movement stay server-owned.
-			local velocity=botRoot.AssemblyLinearVelocity
-			if moving<.1 then moving=math.clamp(Vector3.new(velocity.X,0,velocity.Z).Magnitude/17,0,1) end
-			local stride=math.sin(os.clock()*10+(bot:GetAttribute("ActorId") or 0))*.5*moving
-			if botHum.PlatformStand then stride=0 end
-			actionPose(joints,bot,moving,os.clock()*10+(bot:GetAttribute("ActorId") or 0))
-		end
-	end
+		updateRange(root,showRange)
+	else updateRange(nil,false) end
 	local canLock=wantLock and UIS.MouseEnabled and not following and not GuiService.MenuIsOpen and not UIS:GetFocusedTextBox() and hum and hum.Health > 0
 	if canLock then
 		locked=true; UIS.MouseBehavior=Enum.MouseBehavior.LockCenter
