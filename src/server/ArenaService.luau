@@ -12,7 +12,7 @@ function Arena.new(fx)
 	local self=setmetatable({fx=fx,slabs={},byPart={},age=0,rng=Random.new(),dummies={},adrenalineAt={}},Arena)
 	local world=Instance.new("Model"); world.Name="UnstableArenaWorld"; world.Parent=workspace; self.world=world
 	local lobby=Coliseum.build(world); self.spawn=lobby.spawn; self.pads=lobby.pads
-	self:MakeDummy(CFrame.new(30,70,-81)); return self
+	self:MakeDummy(CFrame.new(30,134,-154)); return self
 end
 function Arena:MakeDummy(home)
 	local rig=Instance.new("Model"); rig.Name="PracticeDummy"; rig.Parent=self.world
