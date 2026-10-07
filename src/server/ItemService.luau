@@ -30,6 +30,7 @@ function Items:Pickup(p, slab, pickup, id)
 	ray.FilterDescendantsInstances = {U.character(p),pickup}
 	if workspace:Raycast(root.Position,pickup.Position-root.Position,ray) then return end
 	slab.pickup = nil; pickup:Destroy()
+	p:SetAttribute("PickupUntil",workspace:GetServerTimeNow()+.42)
 	p:SetAttribute("Item",id); p:SetAttribute("ItemUses",Config.Items[id].Uses)
 	U.notify(self.fx,p,"Toast",Config.Items[id].Name)
 end
@@ -64,6 +65,8 @@ function Items:Use(p, aim)
 	if not self.combat:Ready(p,"Item",.8) then return end
 	local root = U.root(p); if not root then return end
 	local now = workspace:GetServerTimeNow()
+	p:SetAttribute("ItemActionUntil",now+.48)
+	p:SetAttribute("ItemActionKind",id)
 	if id == "Shield" then
 		p:SetAttribute("ShieldUntil",now+8)
 		local char=U.character(p)
