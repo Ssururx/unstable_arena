@@ -68,7 +68,7 @@ function Coliseum.light()
 		local old=Lighting:FindFirstChild(name); if old then old:Destroy() end
 	end
 	local atmosphere=Instance.new("Atmosphere"); atmosphere.Name="ArenaAtmosphere"; atmosphere.Density=.22
-	atmosphere.Offset=.18; atmosphere.Haze=1.25; atmosphere.Glare=.12
+	atmosphere.Offset=.12; atmosphere.Haze=2.05; atmosphere.Glare=.16
 	atmosphere.Color=Color3.fromRGB(216,199,165); atmosphere.Decay=Color3.fromRGB(119,105,87); atmosphere.Parent=Lighting
 	local grade=Instance.new("ColorCorrectionEffect"); grade.Name="ArenaGrade"; grade.Contrast=.09
 	grade.Saturation=-.14; grade.TintColor=Color3.fromRGB(255,245,227); grade.Parent=Lighting
@@ -80,32 +80,32 @@ function Coliseum.build(world)
 	local building=model(world,"ColiseumArchitecture")
 	local tiers=model(building,"AccessibleSpectatorTiers")
 	-- Three continuous concourses. The seating risers between them are walkable.
-	for i,spec in {{88,20,66},{127,10,84},{155,10,102}} do
+	for i,spec in {{154,22,130},{202,12,151},{246,12,174}} do
 		G.ring(tiers,"Concourse"..i,spec[1],spec[2],spec[3]-1.5,3,stone,material,80,.96)
 		-- Only the innermost edge needs a continuous guard, to preserve stair access.
 		if i == 1 then
-			G.ring(tiers,"PitBalustrade",77.6,.9,68,4,pale,material,80,.96)
-			G.ring(tiers,"BalustradeCap",77.6,1.7,70.2,.45,bronze,material,80,.96)
+			G.ring(tiers,"PitBalustrade",142,.9,132,4,pale,material,96,.97)
+			G.ring(tiers,"BalustradeCap",142,1.7,134.2,.45,bronze,material,96,.97)
 		end
 	end
 	for section=1,2 do
-		for row=0,11 do
-			local radius=if section == 1 then 99+row*2 else 133+row*1.5
-			local y=if section == 1 then 67.5+row*1.5 else 85.5+row*1.5
+		for row=0,17 do
+			local radius=if section == 1 then 158+row*2.35 else 207+row*2.15
+			local y=if section == 1 then 133+row*1.55 else 154+row*1.6
 			local pieces=G.ring(tiers,"SeatingTier",radius,if section == 1 then 2.2 else 1.7,y-.75,1.5,pale,material,64,.96)
 			for index,part in pieces do
 				-- Leave a monumental, open entrance above the lower lobby courtyard.
 				local p=part.Position
-				if p.Z < -85 and math.abs(p.X)<37 then part:Destroy()
+				if p.Z < -150 and math.abs(p.X)<50 then part:Destroy()
 				elseif (index-1)%16 == 0 then part.Name="RadialStair"; part.Color=stone
 				else part.Color=pale:Lerp(stone,(row%3)*.08) end
 			end
 		end
 	end
 	-- A continuous outer arcade, with actual openings rather than painted arches.
-	local bays=40; local radius=165
+	local bays=56; local radius=276
 	for level=0,2 do
-		local baseY=62+level*22
+		local baseY=125+level*24
 		for i=0,bays-1 do
 			local a=i/bays*2*math.pi
 			local position=Vector3.new(math.sin(a)*radius,baseY,math.cos(a)*radius*.96)
@@ -115,51 +115,67 @@ function Coliseum.build(world)
 		end
 		G.ring(building,"Cornice",radius,5.4,baseY+21,1.1,pale,material,80,.96)
 	end
-	G.ring(building,"AtticWall",165,4,132,9,stone,material,80,.96)
-	G.ring(building,"Crown",165,6,137,1.3,pale,material,80,.96)
-	G.ring(building,"Foundation",165,8,52,20,shadow,material,80,.96)
-	G.ring(building,"OuterParapet",160,1,104,4,pale,material,80,.96)
+	G.ring(building,"AtticWall",276,4,198,10,stone,material,112,.97)
+	G.ring(building,"Crown",276,6,204,1.5,pale,material,112,.97)
+	G.ring(building,"Foundation",276,10,102,34,shadow,material,112,.97)
+	G.ring(building,"OuterParapet",268,1,178,4,pale,material,112,.97)
+
+	-- Distant seating fades into the atmosphere so the arena feels far larger than the playable shell.
+	for row=0,20 do
+		local radius=292+row*7.5
+		local y=198+row*2.3
+		local fade=math.clamp(row/20,0,1)
+		local c=pale:Lerp(Color3.fromRGB(199,190,176),fade*.55)
+		for _,part in G.ring(building,"DistantTier",radius,6.6,y,2.2,c,material,96,.98) do
+			part.Transparency=.08+fade*.58
+			part.CanCollide=false
+			part.CanQuery=false
+			part.CastShadow=row<7
+		end
+	end
 	-- Banners, bronze brackets and limited warm lights set the visual rhythm.
 	for i=0,11 do
-		local a=i/12*math.pi*2; local cf=CFrame.new(math.sin(a)*162,111,math.cos(a)*162*.96)*CFrame.Angles(0,a,0)
+		local a=i/12*math.pi*2; local cf=CFrame.new(math.sin(a)*270,184,math.cos(a)*270*.97)*CFrame.Angles(0,a,0)
 		local banner=U.part(building,"ClothBanner",Vector3.new(6.5,15,.18),cf,red,Enum.Material.Fabric)
 		banner.CanCollide=false; banner.CanQuery=false
 		U.part(building,"BannerHem",Vector3.new(6.5,.25,.22),cf*CFrame.new(0,-7,0),bronze,Enum.Material.Fabric).CanCollide=false
 		G.line(building,"BannerRod",(cf*CFrame.new(-4,8,0)).Position,(cf*CFrame.new(4,8,0)).Position,.2,bronze,Enum.Material.Metal)
-		if i%2 == 0 and i~=6 then torch(building,CFrame.new(math.sin(a)*90,68,math.cos(a)*90*.96)) end
+		if i%2 == 0 and i~=6 then torch(building,CFrame.new(math.sin(a)*151,132,math.cos(a)*151*.97)) end
 	end
 	-- Dark depth, a masonry support drum, and strata inside the chasm.
-	G.ring(building,"ChasmWall",74,10,38,54,Color3.fromRGB(67,63,57),Enum.Material.Rock,64,1)
-	G.cylinder(building,"BuriedFoundation",182,6,CFrame.new(0,0,0),Color3.fromRGB(91,82,63),Enum.Material.Ground)
-	local drum=G.cylinder(building,"SupportDrum",8.5,46,CFrame.new(0,29,0),shadow,Enum.Material.Slate)
-	local capital=G.cylinder(building,"SupportCapital",11,3,CFrame.new(0,53.5,0),bronze,material)
+	G.ring(building,"ChasmWall",140,12,64,112,Color3.fromRGB(50,48,46),Enum.Material.Rock,96,1)
+	local drum=G.cylinder(building,"SupportDrum",11.5,104,CFrame.new(0,68,0),Color3.fromRGB(55,53,52),Enum.Material.Slate)
+	local capital=G.cylinder(building,"SupportCapital",15,4,CFrame.new(0,120,0),bronze,material)
 	drum.CanCollide=false; drum.CanQuery=false; capital.CanCollide=false; capital.CanQuery=false
-	local pit=G.cylinder(building,"Void",72,2,CFrame.new(0,5,0),Color3.fromRGB(19,20,22),Enum.Material.SmoothPlastic)
+	local pit=G.cylinder(building,"Void",138,5,CFrame.new(0,11,0),Color3.fromRGB(4,5,7),Enum.Material.SmoothPlastic)
 	pit.CanCollide=false; pit.CanQuery=false
-	for i=0,2 do G.ring(building,"ExposedFoundationCourse",70,2,19+i*11,2,shadow,Enum.Material.Rock,64,1) end
+	for i=0,4 do
+		local ring=G.ring(building,"AbyssCourse",135-i*5,4,25+i*15,3,Color3.fromRGB(42+i*4,40+i*4,39+i*4),Enum.Material.Rock,80,1)
+		for _,part in ring do part.Transparency=.16+i*.08; part.CanCollide=false; part.CanQuery=false end
+	end
 	local lobby=model(world,"LobbyCourtyard")
-	U.part(lobby,"CourtyardFloor",Vector3.new(74,3,62),CFrame.new(0,64.5,-105),stone,material)
+	U.part(lobby,"CourtyardFloor",Vector3.new(74,3,62),CFrame.new(0,128.5,-183),stone,material)
 	for _,x in {-34,34} do
-		U.part(lobby,"CourtyardInlay",Vector3.new(.3,.035,54),CFrame.new(x,66.02,-105),bronze,Enum.Material.Metal).CanCollide=false
-		statue(lobby,CFrame.new(x,67.5,-123)); torch(lobby,CFrame.new(x,68,-88))
+		U.part(lobby,"CourtyardInlay",Vector3.new(.3,.035,54),CFrame.new(x,130.02,-183),bronze,Enum.Material.Metal).CanCollide=false
+		statue(lobby,CFrame.new(x,131.5,-203)); torch(lobby,CFrame.new(x,132,-158))
 	end
 	local spawn=Instance.new("SpawnLocation"); spawn.Name="LobbySpawn"; spawn.Size=Vector3.new(5,.2,5)
-	spawn.CFrame=CFrame.new(0,66.1,-128); spawn.Transparency=1; spawn.Anchored=true; spawn.CanCollide=false
+	spawn.CFrame=CFrame.new(0,130.1,-214); spawn.Transparency=1; spawn.Anchored=true; spawn.CanCollide=false
 	spawn.Duration=0; spawn.Neutral=true; spawn.Parent=lobby
-	local inscription=U.part(lobby,"ArenaInscription",Vector3.new(40,4,.8),CFrame.new(0,77,-137),shadow,material)
+	local inscription=U.part(lobby,"ArenaInscription",Vector3.new(40,4,.8),CFrame.new(0,141,-225),shadow,material)
 	sign(inscription,Enum.NormalId.Back,"ROMAN COLISEUM","PUSH  /  BALANCE  /  SURVIVE")
 	local pads={}
 	local function pad(kind,index,name,sub,x,z,width,depth)
-		local base=U.part(lobby,"SelectionPad",Vector3.new(width,.35,depth),CFrame.new(x,66.2,z),shadow,material)
-		local edge=U.part(lobby,"SelectionBorder",Vector3.new(width+.5,.12,depth+.5),CFrame.new(x,66.01,z),bronze,Enum.Material.Metal)
+		local base=U.part(lobby,"SelectionPad",Vector3.new(width,.35,depth),CFrame.new(x,130.2,z),shadow,material)
+		local edge=U.part(lobby,"SelectionBorder",Vector3.new(width+.5,.12,depth+.5),CFrame.new(x,130.01,z),bronze,Enum.Material.Metal)
 		edge.CanCollide=false
 		local title,small=sign(base,Enum.NormalId.Top,name,sub)
 		table.insert(pads,{part=base,kind=kind,index=index,title=title,small=small,name=name,edge=edge})
 	end
-	pad("map",1,"ROMAN COLISEUM","STEP ON THE STONE TO SELECT",0,-90,28,12)
+	pad("map",1,"ROMAN COLISEUM","STEP ON THE STONE TO SELECT",0,-165,32,13)
 	for i,mode in {"FFA","Duos","Squads"} do
-		pad("mode",i,if mode == "FFA" then "FREE FOR ALL" else string.upper(mode),"WAITING FOR MAP SELECTION",(i-2)*23,-114,19,10)
+		pad("mode",i,if mode == "FFA" then "FREE FOR ALL" else string.upper(mode),"WAITING FOR MAP SELECTION",(i-2)*25,-192,21,11)
 	end
-	return {spawn=CFrame.lookAt(Vector3.new(0,70,-128),Vector3.new(0,70,0)),pads=pads,lobby=lobby}
+	return {spawn=CFrame.lookAt(Vector3.new(0,134,-214),Vector3.new(0,134,0)),pads=pads,lobby=lobby}
 end
 return Coliseum
