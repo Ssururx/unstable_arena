@@ -224,30 +224,86 @@ local function actionPose(joints,actor,walkAmount,phase)
 end
 local function effect(kind,a,b)
 	local camera=workspace.CurrentCamera
-	if typeof(a) ~= "Vector3" or not camera or (camera.CFrame.Position-a).Magnitude > 230 or #effects:GetChildren() >= 70 then return end
-	local part=Instance.new("Part"); part.Anchored=true; part.CanCollide=false; part.CanTouch=false; part.CanQuery=false
-	part.Material=Enum.Material.SmoothPlastic; part.Color=colors.gold; part.Transparency=.3
-	if kind == "Arrow" or kind == "Grab" then
-		if typeof(b) ~= "Vector3" or (b-a).Magnitude < .01 then part:Destroy(); return end
-		part.Size=Vector3.new(.12,.12,(b-a).Magnitude); part.CFrame=CFrame.lookAt((a+b)/2,b)
-		part.Color=if kind == "Arrow" then Color3.fromRGB(217,195,141) else Color3.fromRGB(210,208,186)
-	else
-		part.Size=Vector3.one*.1
-		part.Position=if kind == "Swing" and typeof(b) == "Vector3" then a+b*3 else a
-		part.Transparency=1
-		local dust=Instance.new("ParticleEmitter")
-		dust.Texture="rbxasset://textures/particles/smoke_main.dds"
-		dust.Color=ColorSequence.new(if kind=="Block" then Color3.fromRGB(186,207,224) else Color3.fromRGB(153,137,109))
-		dust.Lifetime=NumberRange.new(.25,.6); dust.Speed=NumberRange.new(2,if kind=="Break" then 12 else 6)
-		dust.SpreadAngle=Vector2.new(180,180); dust.Rate=0; dust.LightInfluence=.85
-		dust.Size=NumberSequence.new({NumberSequenceKeypoint.new(0,.35),NumberSequenceKeypoint.new(1,if kind=="Break" then 4 else 1.5)})
-		dust.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,.45),NumberSequenceKeypoint.new(1,1)})
-		dust.Parent=part; part.Parent=effects
-		dust:Emit(if kind=="Break" then 18 elseif kind=="Crack" then 7 else 4)
-		Debris:AddItem(part,.8); return
+	if typeof(a)~="Vector3" or not camera or (camera.CFrame.Position-a).Magnitude>420 or #effects:GetChildren()>=120 then return end
+
+	local function basePart()
+		local p=Instance.new("Part")
+		p.Anchored=true; p.CanCollide=false; p.CanTouch=false; p.CanQuery=false
+		p.Material=Enum.Material.SmoothPlastic; p.Color=colors.gold; p.Transparency=.3
+		p.Parent=effects
+		return p
 	end
-	part.Parent=effects
-	TweenService:Create(part,TweenInfo.new(.25),{Transparency=1}):Play(); Debris:AddItem(part,.3)
+	local function line(from,to,width,color,duration)
+		if typeof(to)~="Vector3" or (to-from).Magnitude<.01 then return end
+		local p=basePart(); p.Size=Vector3.new(width,width,(to-from).Magnitude)
+		p.CFrame=CFrame.lookAt((from+to)/2,to); p.Color=color; p.Material=Enum.Material.Neon
+		TweenService:Create(p,TweenInfo.new(duration or .22),{Transparency=1}):Play()
+		Debris:AddItem(p,(duration or .22)+.05)
+	end
+	local function burst(position,color,count,size)
+		local p=basePart(); p.Size=Vector3.one*.1; p.Position=position; p.Transparency=1
+		local emitter=Instance.new("ParticleEmitter")
+		emitter.Texture="rbxasset://textures/particles/smoke_main.dds"
+		emitter.Color=ColorSequence.new(color)
+		emitter.Lifetime=NumberRange.new(.25,.7); emitter.Speed=NumberRange.new(3,11)
+		emitter.SpreadAngle=Vector2.new(180,180); emitter.Rate=0; emitter.LightInfluence=.65
+		emitter.Size=NumberSequence.new({NumberSequenceKeypoint.new(0,.3),NumberSequenceKeypoint.new(1,size or 2)})
+		emitter.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,.2),NumberSequenceKeypoint.new(1,1)})
+		emitter.Parent=p; emitter:Emit(count or 8); Debris:AddItem(p,.9)
+	end
+
+	if kind=="DangerCircle" then
+		local radius=if typeof(b)=="number" then b else 6
+		local ring=basePart(); ring.Name="DangerTelegraph"; ring.Shape=Enum.PartType.Cylinder
+		ring.Material=Enum.Material.Neon; ring.Color=Color3.fromRGB(231,108,66); ring.Transparency=.45
+		ring.Size=Vector3.new(.07,radius*2,radius*2)
+		ring.CFrame=CFrame.new(a-Vector3.new(0,2.7,0))*CFrame.Angles(0,0,math.pi/2)
+		local pulse=TweenService:Create(ring,TweenInfo.new(.55,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut,-1,true),{Transparency=.12})
+		pulse:Play(); Debris:AddItem(ring,1.2)
+		return
+	elseif kind=="MeteorIncoming" and typeof(b)=="Vector3" then
+		local rock=basePart(); rock.Shape=Enum.PartType.Ball; rock.Size=Vector3.one*3.8
+		rock.Material=Enum.Material.Rock; rock.Color=Color3.fromRGB(83,55,40); rock.Position=a
+		local fire=Instance.new("Fire"); fire.Size=5; fire.Heat=4; fire.Parent=rock
+		TweenService:Create(rock,TweenInfo.new(1.12,Enum.EasingStyle.Linear),{Position=b}):Play()
+		Debris:AddItem(rock,1.18); return
+	elseif kind=="MeteorImpact" then
+		burst(a,Color3.fromRGB(225,119,58),24,4.5); return
+	elseif kind=="Mace" then
+		line(a,b,.42,Color3.fromRGB(201,151,79),.1); return
+	elseif kind=="MaceImpact" then
+		burst(a,Color3.fromRGB(180,139,78),12,2.3); return
+	elseif kind=="Arrow" then
+		line(a,b,.12,Color3.fromRGB(217,195,141),.22); return
+	elseif kind=="Grab" then
+		line(a,b,.12,Color3.fromRGB(210,208,186),.24); return
+	elseif kind=="SwordSwing" and typeof(b)=="Vector3" then
+		local dir=b.Magnitude>.1 and b.Unit or Vector3.zAxis
+		line(a+Vector3.new(0,1,0),a+Vector3.new(0,1,0)+dir*5,.32,Color3.fromRGB(224,219,199),.16); return
+	elseif kind=="Dash" or kind=="Slide" then
+		burst(a,Color3.fromRGB(169,151,119),if kind=="Dash" then 9 else 14,if kind=="Dash" then 1.3 else 1.8); return
+	elseif kind=="Adrenaline" then
+		burst(a,Color3.fromRGB(231,126,62),22,2.5); return
+	elseif kind=="LionSpawn" then
+		burst(a,Color3.fromRGB(188,137,73),18,2.8); return
+	elseif kind=="LionAttack" then
+		burst(a,Color3.fromRGB(151,82,52),11,2); return
+	end
+
+	local part=basePart()
+	part.Size=Vector3.one*.1
+	part.Position=if kind=="Swing" and typeof(b)=="Vector3" then a+b*3 else a
+	part.Transparency=1
+	local dust=Instance.new("ParticleEmitter")
+	dust.Texture="rbxasset://textures/particles/smoke_main.dds"
+	dust.Color=ColorSequence.new(if kind=="Block" then Color3.fromRGB(186,207,224) else Color3.fromRGB(153,137,109))
+	dust.Lifetime=NumberRange.new(.25,.6); dust.Speed=NumberRange.new(2,if kind=="Break" then 12 else 6)
+	dust.SpreadAngle=Vector2.new(180,180); dust.Rate=0; dust.LightInfluence=.85
+	dust.Size=NumberSequence.new({NumberSequenceKeypoint.new(0,.35),NumberSequenceKeypoint.new(1,if kind=="Break" then 4 else 1.5)})
+	dust.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,.45),NumberSequenceKeypoint.new(1,1)})
+	dust.Parent=part
+	dust:Emit(if kind=="Break" then 18 elseif kind=="Crack" then 7 else 4)
+	Debris:AddItem(part,.8)
 end
 fx.OnClientEvent:Connect(function(kind,a,b)
 	if kind == "Toast" then toast(a)
