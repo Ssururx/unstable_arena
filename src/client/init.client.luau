@@ -78,9 +78,10 @@ local itemHint=label(inventory,"R / Y pickup  •  1–3 select  •  F use",UDi
 itemHint.TextColor3=Color3.fromRGB(205,195,175)
 local slotButtons={}; local slotStrokes={}
 for i=1,3 do
+	local slot=i
 	local x=8+(i-1)*139
 	local b=button(inventory,tostring(i).."  EMPTY",UDim2.fromOffset(132,60),UDim2.fromOffset(x,25),function()
-		action:FireServer("SelectSlot",i)
+		action:FireServer("SelectSlot",slot)
 	end)
 	b.TextSize=13; b.TextWrapped=true
 	local stroke=Instance.new("UIStroke"); stroke.Thickness=1.5; stroke.Transparency=.5; stroke.Color=colors.gold; stroke.Parent=b
@@ -157,6 +158,11 @@ UIS.InputEnded:Connect(function(input)
 end)
 player.CharacterAdded:Connect(function() restoreCamera(); wantLock=false; action:FireServer("Sprint",false) end)
 local effects=Instance.new("Folder"); effects.Name="ArenaLocalEffects"; effects.Parent=workspace
+local maceRange=Instance.new("Part"); maceRange.Name="MaceRange"; maceRange.Anchored=true
+maceRange.CanCollide=false; maceRange.CanTouch=false; maceRange.CanQuery=false
+maceRange.Shape=Enum.PartType.Cylinder; maceRange.Material=Enum.Material.Neon
+maceRange.Color=Color3.fromRGB(205,156,83); maceRange.Transparency=1
+maceRange.Size=Vector3.new(.05,Config.Combat.MaceLockRange*2,Config.Combat.MaceLockRange*2); maceRange.Parent=effects
 local animatedBots={}
 local function registerBot(bot)
 	task.spawn(function()
@@ -349,9 +355,15 @@ local function updateUI()
 		elseif adrenalineValue>=Config.Adrenaline.Max then "ADRENALINE READY  •  G"
 		else "ADRENALINE  "..math.floor(adrenalineValue).."%"
 	local hazard=workspace:GetAttribute("Hazard") or ""
+	local hazardActiveAt=workspace:GetAttribute("HazardActiveAt") or 0
+	local hazardCountdown=math.max(0,math.ceil(hazardActiveAt-now))
 	hazardPanel.Visible=phase=="Live" and hazard~=""
-	hazardText.Text=if hazard=="Meteor" then "⚠  METEOR SHOWER  •  WATCH TELEGRAPHS"
-		elseif hazard=="Lions" then "⚠  LIONS RELEASED  •  KEEP MOVING" else ""
+	if hazard~="" and now<hazardActiveAt then
+		hazardText.Text="⚠  "..(hazard=="Meteor" and "METEOR SHOWER" or "LION RELEASE").." IN "..hazardCountdown.."s"
+	else
+		hazardText.Text=if hazard=="Meteor" then "⚠  METEOR SHOWER  •  WATCH TELEGRAPHS"
+			elseif hazard=="Lions" then "⚠  LIONS RELEASED  •  KEEP MOVING" else ""
+	end
 	toastPanel.Visible=os.clock() < toastUntil
 	local statsFolder=player:FindFirstChild("leaderstats")
 	if statsFolder and statsFolder:FindFirstChild("Wins") and statsFolder:FindFirstChild("Coins") then
@@ -391,7 +403,12 @@ RunService:BindToRenderStep("UnstableCamera",Enum.RenderPriority.Camera.Value+1,
 	if hum and root then
 		local speed=Vector3.new(root.AssemblyLinearVelocity.X,0,root.AssemblyLinearVelocity.Z).Magnitude
 		actionPose(playerJoints(),player,math.clamp(speed/20,0,1),os.clock()*10)
-	end
+		local showRange=player:GetAttribute("InRound")==true and player:GetAttribute("Item")=="Mace"
+		if showRange then
+			maceRange.Transparency=.82
+			maceRange.CFrame=CFrame.new(root.Position-Vector3.new(0,2.8,0))*CFrame.Angles(0,0,math.pi/2)
+		else maceRange.Transparency=1 end
+	else maceRange.Transparency=1 end
 	for bot,joints in animatedBots do
 		local botRoot=bot:FindFirstChild("HumanoidRootPart")
 		local botHum=bot:FindFirstChildOfClass("Humanoid")
