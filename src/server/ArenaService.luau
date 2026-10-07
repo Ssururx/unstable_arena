@@ -80,7 +80,7 @@ function Arena:Build(map,seed)
 			durability=self.rng:NextNumber(Config.Slabs.DurabilityMin,Config.Slabs.DurabilityMax),extraWeight=0,weightUntil=0,
 			cracks={},faces={},lastStage=-1,color=color,neighbors={}}
 		for _,p in G.polygon(slab,cell.polygon,y,4.6,color,map.Material) do
-			p.CustomPhysicalProperties=PhysicalProperties.new(1.2,.52,.04)
+			p.CustomPhysicalProperties=PhysicalProperties.new(1.2,.32,.03)
 			U.weld(pivot,p); self.byPart[p]=record; table.insert(record.faces,p)
 		end
 		local lower={}
@@ -119,7 +119,44 @@ function Arena:GroundAt(position,depth)
 	if slab and not slab.broken then return slab,hit.Position end
 	return nil,nil
 end
-function Arena:Under(root) return self:GroundAt(root.Position,9) end
+function Arena:Under(root) return self:GroundAt(root.Position,14) end
+
+function Arena:ApplySlopePhysics(active)
+	if not self.core or not self.core.Parent then return end
+	local normal=self.core.CFrame.UpVector
+	local tilt=math.deg(math.acos(math.clamp(normal:Dot(Vector3.yAxis),-1,1)))
+	if tilt < Config.Arena.SlipStart then return end
+
+	local gravity=Vector3.new(0,-workspace.Gravity,0)
+	local downhill=gravity-normal*gravity:Dot(normal)
+	if downhill.Magnitude < .01 then return end
+
+	local alpha=math.clamp(
+		(tilt-Config.Arena.SlipStart)/(Config.Arena.SlipFull-Config.Arena.SlipStart),
+		0,1
+	)
+	local forceScale=Config.Arena.SlipForce*(.25+.75*alpha)
+
+	for _,actor in active do
+		local root,hum=U.root(actor)
+		if not root or root.Anchored or hum.PlatformStand then continue end
+		local slab=self:Under(root)
+		if not slab then continue end
+
+		local traction=if (actor:GetAttribute("AnchorUntil") or 0)>workspace:GetServerTimeNow() then .24 else 1
+		local accel=downhill*forceScale*traction
+		local v=root.AssemblyLinearVelocity
+		root.AssemblyLinearVelocity=Vector3.new(
+			v.X+accel.X*.08,
+			v.Y,
+			v.Z+accel.Z*.08
+		)
+
+		if alpha>.55 then
+			hum.WalkSpeed=math.max(12,(actor:GetAttribute("Bot") and Config.Bots.WalkSpeed or 20)*(1-alpha*.26))
+		end
+	end
+end
 function Arena:Break(s)
 	if s.broken then return end
 	s.broken=true; s.model:SetAttribute("Broken",true)
@@ -149,10 +186,16 @@ function Arena:Step(dt,active)
 			weights[s]=(weights[s] or 0)+s.extraWeight
 		end
 	end
-	local pitch,roll=Rules.limitTilt(tz*Config.Arena.TiltPerStud+math.sin(self.age*1.4)*self.map.Wave,
-		-tx*Config.Arena.TiltPerStud+math.sin(self.age*.9+1)*self.map.Wave,Config.Arena.MaxTilt)
+	local intensity=math.clamp(self.age/(self.map.Duration*.72),0,1)
+	local chaos=1+intensity*.55
+	local pitch,roll=Rules.limitTilt(
+		tz*Config.Arena.TiltPerStud*chaos+math.sin(self.age*1.4)*self.map.Wave*chaos,
+		-tx*Config.Arena.TiltPerStud*chaos+math.sin(self.age*.9+1)*self.map.Wave*chaos,
+		Config.Arena.MaxTilt
+	)
 	self.orientation.CFrame=CFrame.Angles(math.rad(pitch),0,math.rad(roll))
 	local tilt=math.sqrt(pitch*pitch+roll*roll)/Config.Arena.MaxTilt
+	self:ApplySlopePhysics(active)
 	for _,s in self.slabs do
 		if s.broken then continue end
 		if self.age>Config.Slabs.Grace then s.stress+=Rules.stressRate(weights[s] or 0,tilt,self.age,self.map.Duration)*dt end
@@ -173,7 +216,7 @@ function Arena:SpawnPoints(count)
 	local used={}; local points={}
 	for i=1,count do
 		local a=(i-1)/count*math.pi*2
-		local desired=Config.Arena.Center+Vector3.new(math.sin(a)*36,0,math.cos(a)*36)
+		local desired=Config.Arena.Center+Vector3.new(math.sin(a)*76,0,math.cos(a)*76)
 		local best,distance=nil,math.huge
 		for _,slab in self.slabs do
 			local d=(slab.part.Position-desired).Magnitude
