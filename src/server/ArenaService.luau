@@ -42,8 +42,13 @@ function Arena:SetPadPhase(phase,counts)
 	for _,pad in self.pads do
 		local enabled=(phase=="MapVote" and pad.kind=="map") or (phase=="ModeVote" and pad.kind=="mode")
 		pad.part.Color=if enabled then Color3.fromRGB(143,115,70) else Color3.fromRGB(85,79,68)
+		pad.part.Transparency=if enabled then 0 else .72
+		pad.edge.Transparency=if enabled then 0 else .72
 		pad.title.TextColor3=if enabled then Color3.fromRGB(246,226,179) else Color3.fromRGB(153,145,128)
+		pad.title.TextTransparency=if enabled then 0 else .78
+		for _,piece in pad.boardParts or {} do piece.Transparency=if enabled then 0 else .82 end
 		local votes=counts and counts[pad.kind] and counts[pad.kind][pad.index] or 0
+		pad.small.TextTransparency=if enabled then 0 else 1
 		pad.small.Text=if enabled then "STAND HERE  •  "..votes.." SELECTED" elseif phase=="Live" then "NEXT ROUND" else ""
 	end
 end
