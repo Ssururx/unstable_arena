@@ -165,16 +165,42 @@ function Coliseum.build(world)
 	local inscription=U.part(lobby,"ArenaInscription",Vector3.new(40,4,.8),CFrame.new(0,141,-225),shadow,material)
 	sign(inscription,Enum.NormalId.Back,"ROMAN COLISEUM","PUSH  /  BALANCE  /  SURVIVE")
 	local pads={}
+	local voting=model(lobby,"VotingGallery")
+	local header=U.part(voting,"VotingHeader",Vector3.new(70,5,.8),CFrame.new(0,147,-214),shadow,material)
+	sign(header,Enum.NormalId.Back,"ARENA VOTING","STAND ON A MARKED TILE TO CAST YOUR VOTE")
+
+	local function board(x,z,width,name,sub,locked)
+		local frame=U.part(voting,"VoteBoardFrame",Vector3.new(width+1.5,15,1.1),CFrame.new(x,139,z),bronze,Enum.Material.Metal)
+		frame.CanCollide=false
+		local panel=U.part(voting,"VoteBoard",Vector3.new(width,13.5,.7),CFrame.new(x,139,z+.3),if locked then Color3.fromRGB(63,59,52) else Color3.fromRGB(88,74,55),Enum.Material.WoodPlanks)
+		panel.CanCollide=false
+		local title,small=sign(panel,Enum.NormalId.Back,name,sub)
+		if locked then
+			title.TextColor3=Color3.fromRGB(142,135,123); small.TextColor3=Color3.fromRGB(120,114,104)
+		end
+		for _,side in {-1,1} do
+			U.part(voting,"BoardPost",Vector3.new(.7,6,.7),CFrame.new(x+side*(width/2-.8),132.5,z),bronze,Enum.Material.Metal).CanCollide=false
+		end
+		return title,small
+	end
+
 	local function pad(kind,index,name,sub,x,z,width,depth)
-		local base=U.part(lobby,"SelectionPad",Vector3.new(width,.35,depth),CFrame.new(x,130.2,z),shadow,material)
-		local edge=U.part(lobby,"SelectionBorder",Vector3.new(width+.5,.12,depth+.5),CFrame.new(x,130.01,z),bronze,Enum.Material.Metal)
+		local base=U.part(voting,"SelectionPad",Vector3.new(width,.32,depth),CFrame.new(x,130.18,z),Color3.fromRGB(83,73,59),Enum.Material.Slate)
+		local edge=U.part(voting,"SelectionBorder",Vector3.new(width+.8,.1,depth+.8),CFrame.new(x,130.0,z),bronze,Enum.Material.Metal)
 		edge.CanCollide=false
-		local title,small=sign(base,Enum.NormalId.Top,name,sub)
+		local boardZ=z-depth/2-2.1
+		local title,small=board(x,boardZ,width,name,sub,false)
 		table.insert(pads,{part=base,kind=kind,index=index,title=title,small=small,name=name,edge=edge})
 	end
-	pad("map",1,"ROMAN COLISEUM","STEP ON THE STONE TO SELECT",0,-165,32,13)
+
+	-- MM2-inspired physical voting wall: large framed choice card + standing tile.
+	pad("map",1,"ROMAN COLISEUM","STAND HERE TO VOTE",0,-163,27,10)
+	board(-30,-170,24,"LOCKED ARENA","MORE MAPS COMING",true)
+	board(30,-170,24,"LOCKED ARENA","MORE MAPS COMING",true)
+
 	for i,mode in {"FFA","Duos","Squads"} do
-		pad("mode",i,if mode == "FFA" then "FREE FOR ALL" else string.upper(mode),"WAITING FOR MAP SELECTION",(i-2)*25,-192,21,11)
+		local display=if mode=="FFA" then "FREE FOR ALL" else string.upper(mode)
+		pad("mode",i,display,"MODE VOTE",(i-2)*27,-193,23,9)
 	end
 	return {spawn=CFrame.lookAt(Vector3.new(0,134,-214),Vector3.new(0,134,0)),pads=pads,lobby=lobby}
 end
