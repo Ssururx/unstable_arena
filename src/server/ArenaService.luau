@@ -9,7 +9,7 @@ local G=require(script.Parent.Geometry)
 local Coliseum=require(script.Parent.Coliseum)
 local Arena={}; Arena.__index=Arena
 function Arena.new(fx)
-	local self=setmetatable({fx=fx,slabs={},byPart={},age=0,rng=Random.new(),dummies={}},Arena)
+	local self=setmetatable({fx=fx,slabs={},byPart={},age=0,rng=Random.new(),dummies={},adrenalineAt={}},Arena)
 	local world=Instance.new("Model"); world.Name="UnstableArenaWorld"; world.Parent=workspace; self.world=world
 	local lobby=Coliseum.build(world); self.spawn=lobby.spawn; self.pads=lobby.pads
 	self:MakeDummy(CFrame.new(30,70,-81)); return self
@@ -58,7 +58,7 @@ function Arena:PadAt(position,kind)
 end
 function Arena:Build(map,seed)
 	if self.model then self.model:Destroy() end
-	table.clear(self.slabs); table.clear(self.byPart); self.age=0; self.map=map
+	table.clear(self.slabs); table.clear(self.byPart); table.clear(self.adrenalineAt); self.age=0; self.map=map
 	local model=Instance.new("Model"); model.Name="RoundArena"; model.Parent=self.world; self.model=model
 	local core=U.part(model,"Core",Vector3.new(3,2,3),CFrame.new(Config.Arena.Center))
 	core.Transparency=1; core.CanCollide=false; core.CanQuery=false; core.RootPriority=127; self.core=core
@@ -185,9 +185,15 @@ function Arena:Step(dt,active)
 		if root then
 			local slab=self:Under(root)
 			if slab then
-				local weight=if (actor:GetAttribute("AnchorUntil") or 0)>workspace:GetServerTimeNow() then 3 else 1
+				local weight=if (actor:GetAttribute("AnchorUntil") or 0)>workspace:GetServerTimeNow() then 1.5 else 1
 				weights[slab]=(weights[slab] or 0)+weight
 				local offset=root.Position-Config.Arena.Center; tx+=offset.X*weight; tz+=offset.Z*weight
+				local radial=Vector3.new(offset.X,0,offset.Z).Magnitude
+				if radial>Config.Arena.Radius*.84 and os.clock()>(self.adrenalineAt[actor] or 0) then
+					self.adrenalineAt[actor]=os.clock()+5
+					local current=actor:GetAttribute("Adrenaline") or 0
+					actor:SetAttribute("Adrenaline",math.clamp(current+Config.Adrenaline.NearEdgeGain,0,Config.Adrenaline.Max))
+				end
 			end
 		end
 	end
