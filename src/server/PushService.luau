@@ -18,6 +18,11 @@ end
 function Combat:Forget(p)
 	self.times[p] = nil; self.credit[p] = nil
 end
+function Combat:AddAdrenaline(actor,amount)
+	if not actor or not self.round:IsActive(actor) then return end
+	local current=actor:GetAttribute("Adrenaline") or 0
+	actor:SetAttribute("Adrenaline",math.clamp(current+amount,0,Config.Adrenaline.Max))
+end
 function Combat:CanAct(p)
 	return self.round:IsActive(p) or (p:IsA("Player") and p:GetAttribute("InRound") ~= true and U.root(p) ~= nil)
 end
@@ -64,6 +69,7 @@ function Combat:Knock(target, velocity, attacker, isRescue)
 			self.fx:FireAllClients("Block",root.Position); return false
 		end
 		if (target:GetAttribute("AnchorUntil") or 0) > now then velocity *= 0.28 end
+		if (target:GetAttribute("AdrenalineUntil") or 0) > now then velocity *= Config.Adrenaline.KnockResistance end
 	end
 	-- Temporarily own the victim assembly so local character simulation cannot swallow the impulse.
 	local canSet = root:CanSetNetworkOwnership()
@@ -74,6 +80,8 @@ function Combat:Knock(target, velocity, attacker, isRescue)
 	root.AssemblyLinearVelocity = Vector3.new(v.X*0.15,math.max(v.Y,0)*0.2,v.Z*0.15)+velocity
 	if attacker and not isRescue and self.round.alive[target] then
 		self.credit[target] = { player = attacker, time = os.clock() }
+		self:AddAdrenaline(attacker,Config.Adrenaline.LandHitGain)
+		self:AddAdrenaline(target,Config.Adrenaline.HitGain)
 	end
 	task.delay(Config.Combat.Recovery,function()
 		if self.ownership[root] ~= token then return end
@@ -102,7 +110,9 @@ function Combat:Push(p, power, ram)
 	local delta = other.Position-root.Position
 	local flat = Vector3.new(delta.X,0,delta.Z)
 	local direction = if flat.Magnitude > 0.01 then flat.Unit else root.CFrame.LookVector
-	self:Knock(target,direction*(power or Config.Combat.Power)+Vector3.new(0,Config.Combat.Lift,0),p)
+	local strength=power or Config.Combat.Power
+	if (p:GetAttribute("AdrenalineUntil") or 0)>workspace:GetServerTimeNow() then strength*=1.14 end
+	self:Knock(target,direction*strength+Vector3.new(0,Config.Combat.Lift,0),p)
 	if ram then
 		self:Knock(p,-direction*24+Vector3.new(0,6,0),nil,true)
 	else
