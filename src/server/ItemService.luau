@@ -193,7 +193,7 @@ function Items:Use(p,aim)
 			if slab.extraWeight>0 and os.clock()<slab.weightUntil then
 				U.notify(self.fx,p,"Toast","This slab already has a weight"); consumed=false
 			else
-				slab.extraWeight=2.5; slab.weightUntil=os.clock()+8
+				slab.extraWeight=1.55; slab.weightUntil=os.clock()+8
 				local weight=U.part(slab.model,"WeightBlock",Vector3.new(2,2,2),slab.part.CFrame*CFrame.new(2,3.3,2),def.Color,Enum.Material.Metal)
 				weight.Massless=true; weight.CanCollide=false; weight.CanQuery=false
 				U.weld(slab.part,weight); Debris:AddItem(weight,8)
