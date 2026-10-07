@@ -112,6 +112,7 @@ function Combat:Push(p, power, ram)
 end
 function Combat:Grab(p)
 	if not self:CanAct(p) or not self:Ready(p,"Grab",Config.Combat.GrabCooldown) then return end
+	p:SetAttribute("GrabUntil",workspace:GetServerTimeNow()+.38)
 	U.notify(self.fx,p,"Cooldown","Grab",Config.Combat.GrabCooldown)
 	local target = self:Target(p,Config.Combat.GrabRange,true)
 	if not target then return end
