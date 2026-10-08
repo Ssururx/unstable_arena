@@ -261,6 +261,27 @@ function Arena:Step(dt,active)
 		if fraction>=1 and s.warningAt and self.age-s.warningAt>=Config.Slabs.WarningTime then self:Break(s) end
 	end
 end
+function Arena:ImpactTilt(position,strength)
+	if not self.core or not self.orientation or not self.core.Parent then return end
+	local offset=position-Config.Arena.Center
+	local flat=Vector3.new(offset.X,0,offset.Z)
+	local direction
+	if flat.Magnitude<1 then
+		local angle=self.rng:NextNumber(0,math.pi*2)
+		direction=Vector3.new(math.sin(angle),0,math.cos(angle))
+	else
+		direction=flat.Unit
+	end
+	local radial=math.clamp(flat.Magnitude/Config.Arena.Radius,.45,1)
+	local kick=(strength or Config.Hazards.MeteorImpactTilt)*radial
+	local pitch=(self.pitch or 0)+direction.Z*kick
+	local roll=(self.roll or 0)-direction.X*kick
+	local clamp=math.min(Config.Arena.MaxTilt,Config.Hazards.MeteorImpactTiltClamp)
+	self.pitch,self.roll=Rules.limitTilt(pitch,roll,clamp)
+	self.orientation.CFrame=CFrame.Angles(math.rad(self.pitch),0,math.rad(self.roll))
+	self.fx:FireAllClients("PlateImpact",position,Vector2.new(self.pitch,self.roll))
+end
+
 function Arena:AddHazardWeight(position,amount,duration)
 	local slab=self:GroundAt(position+Vector3.new(0,14,0),30)
 	if slab then
