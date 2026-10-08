@@ -281,6 +281,17 @@ function Arena:ImpactTilt(position,strength)
 	local clamp=math.min(Config.Arena.MaxTilt,Config.Hazards.MeteorImpactTiltClamp)
 	self.pitch,self.roll=Rules.limitTilt(pitch,roll,clamp)
 	self.orientation.CFrame=CFrame.Angles(math.rad(self.pitch),0,math.rad(self.roll))
+
+	-- Briefly let AlignOrientation react much faster than normal balance motion.
+	self.impactToken=(self.impactToken or 0)+1
+	local token=self.impactToken
+	self.orientation.MaxAngularVelocity=3.2
+	self.orientation.Responsiveness=42
+	task.delay(.48,function()
+		if self.impactToken~=token or not self.orientation or not self.orientation.Parent then return end
+		self.orientation.MaxAngularVelocity=Config.Arena.AngularSpeed
+		self.orientation.Responsiveness=Config.Arena.Response
+	end)
 	self.fx:FireAllClients("PlateImpact",position,Vector2.new(self.pitch,self.roll))
 end
 
