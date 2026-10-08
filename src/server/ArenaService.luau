@@ -247,7 +247,9 @@ function Arena:Step(dt,active)
 	self:ApplySlopePhysics(active,dt)
 	for _,s in self.slabs do
 		if s.broken then continue end
-		if self.age>Config.Slabs.Grace then s.stress+=Rules.stressRate(weights[s] or 0,tilt,self.age,self.map.Duration)*dt end
+		if self.age>Config.Slabs.Grace then
+			s.stress+=Rules.stressRate(weights[s] or 0,tilt,self.age,self.map.Duration)*dt*Config.Slabs.StressMultiplier
+		end
 		local fraction=s.stress/s.durability
 		local stage=if fraction>=.85 then 3 elseif fraction>=.55 then 2 elseif fraction>=.3 then 1 else 0
 		if stage~=s.lastStage then
