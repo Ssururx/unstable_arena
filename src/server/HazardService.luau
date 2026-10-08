@@ -67,15 +67,13 @@ function Hazards:Finish()
 	self.nextAt=os.clock()+self.rng:NextNumber(Config.Hazards.MinGap,Config.Hazards.MaxGap)
 end
 
-function Hazards:ImpactMeteor(position)
+function Hazards:ImpactMeteor(position,slab)
 	if self.round.phase~="Live" then return end
-	local slab=self.arena:AddHazardWeight(position,.85,6)
 	if slab and not slab.broken then
-		slab.stress+=7
-		local stone=U.part(slab.model,"MeteorFragment",Vector3.new(3.2,2.3,3.2),slab.part.CFrame*CFrame.new(0,3.3,0),Color3.fromRGB(72,61,52),Enum.Material.Rock)
-		stone.Shape=Enum.PartType.Ball; stone.Massless=true; stone.CanCollide=false; stone.CanQuery=false
-		U.weld(slab.part,stone); Debris:AddItem(stone,6)
+		-- A direct meteor hit is catastrophic: the exact struck tile fractures away immediately.
+		self.arena:Break(slab)
 	end
+	self.arena:ImpactTilt(position,Config.Hazards.MeteorImpactTilt)
 	for _,actor in self.round:Active() do
 		local root=U.root(actor)
 		if root then
@@ -98,16 +96,26 @@ function Hazards:SpawnMeteor()
 	end
 	if #candidates==0 then return end
 	local slab=candidates[self.rng:NextInteger(1,#candidates)]
-	local target=slab.part.Position+Vector3.new(self.rng:NextNumber(-3,3),3,self.rng:NextNumber(-3,3))
+	local target=slab.part.Position+Vector3.new(self.rng:NextNumber(-2.2,2.2),3,self.rng:NextNumber(-2.2,2.2))
 	local event=self.current
-	local warning={position=target,radius=12,untilTime=os.clock()+1.15}
+	local totalTime=Config.Hazards.MeteorTelegraphTime+Config.Hazards.MeteorFallTime
+	local warning={position=target,radius=12,untilTime=os.clock()+totalTime}
 	table.insert(self.warnings,warning)
 	self.fx:FireAllClients("DangerCircle",target,12)
-	self.fx:FireAllClients("MeteorIncoming",target+Vector3.new(0,85,0),target)
-	task.delay(1.15,function()
+
+	-- Telegraph first, then let the meteor itself cross the sky extremely fast.
+	task.delay(Config.Hazards.MeteorTelegraphTime,function()
+		if self.current~=event or not event or self.round.phase~="Live" or slab.broken then return end
+		self.fx:FireAllClients(
+			"MeteorIncoming",
+			target+Vector3.new(0,Config.Hazards.MeteorFallHeight,0),
+			target
+		)
+	end)
+	task.delay(totalTime,function()
 		local index=table.find(self.warnings,warning); if index then table.remove(self.warnings,index) end
-		if self.current==event and event and self.round.phase=="Live" then
-			self:ImpactMeteor(target)
+		if self.current==event and event and self.round.phase=="Live" and not slab.broken then
+			self:ImpactMeteor(target,slab)
 		end
 	end)
 end
