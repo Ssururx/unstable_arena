@@ -34,12 +34,14 @@ function Items:UpdateHeld(p)
 	holder:SetAttribute("ItemId",id)
 	U.weld(hand,holder); Visuals.attach(holder,id)
 	if id=="Sword" then
-		local blade=holder:FindFirstChild("Blade")
-		local a=Instance.new("Attachment"); a.Position=Vector3.new(0,1.4,0); a.Parent=blade
-		local b=Instance.new("Attachment"); b.Position=Vector3.new(0,-.9,0); b.Parent=blade
-		local trail=Instance.new("Trail"); trail.Name="BladeTrail"; trail.Attachment0=a; trail.Attachment1=b
-		trail.Lifetime=.12; trail.MinLength=.1; trail.Color=ColorSequence.new(Color3.fromRGB(228,212,174))
-		trail.Transparency=NumberSequence.new(.6,1); trail.LightEmission=.35; trail.Enabled=false; trail.Parent=blade
+		local blade=holder:FindFirstChild("Blade",true) or holder:FindFirstChildWhichIsA("MeshPart",true)
+		if blade then
+			local a=Instance.new("Attachment"); a.Position=Vector3.new(0,1.4,0); a.Parent=blade
+			local b=Instance.new("Attachment"); b.Position=Vector3.new(0,-.9,0); b.Parent=blade
+			local trail=Instance.new("Trail"); trail.Name="BladeTrail"; trail.Attachment0=a; trail.Attachment1=b
+			trail.Lifetime=.12; trail.MinLength=.1; trail.Color=ColorSequence.new(Color3.fromRGB(228,212,174))
+			trail.Transparency=NumberSequence.new(.6,1); trail.LightEmission=.35; trail.Enabled=false; trail.Parent=blade
+		end
 	end
 end
 
