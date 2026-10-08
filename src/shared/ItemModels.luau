@@ -29,11 +29,12 @@ local function attachImported(root,id,preview)
 	local grip=template:GetAttribute("GripOffset")
 	if typeof(grip)~="CFrame" then grip=CFrame.identity end
 
-	for _,d in clone:GetDescendants() do
-		if d:IsA("BasePart") then
-			d.CanCollide=false; d.CanTouch=false; d.CanQuery=false; d.Massless=true
-			d.Anchored=preview==true
-		end
+	local parts={}
+	if clone:IsA("BasePart") then table.insert(parts,clone) end
+	for _,d in clone:GetDescendants() do if d:IsA("BasePart") then table.insert(parts,d) end end
+	for _,d in parts do
+		d.CanCollide=false; d.CanTouch=false; d.CanQuery=false; d.Massless=true
+		d.Anchored=preview==true
 	end
 	if clone:IsA("BasePart") then
 		clone.CFrame=root.CFrame*grip
