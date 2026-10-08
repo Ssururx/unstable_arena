@@ -72,8 +72,11 @@ function Animation.start()
 			local velocity=root.AssemblyLinearVelocity
 			local speed=Vector3.new(velocity.X,0,velocity.Z).Magnitude
 			data.phase+=math.min(speed,30)*dt*.52
-			local offsets={}; local weights={}
-			local function set(role,cf,w) offsets[role]=cf; weights[role]=w or 1 end
+			local offsets={}; local weights={}; local absolute={}
+			local function set(role,cf,w,hard)
+				offsets[role]=cf; weights[role]=w or 1
+				if hard then absolute[role]=true end
+			end
 			if actor:GetAttribute("Bot") then
 				local stride=math.sin(data.phase)*math.clamp(speed/18,0,1)*.58
 				set("rightHip",CFrame.Angles(stride,0,0)); set("leftHip",CFrame.Angles(-stride,0,0))
@@ -81,8 +84,12 @@ function Animation.start()
 				set("body",CFrame.new(0,math.abs(math.sin(data.phase))*.055,0))
 			end
 			local item=actor:GetAttribute("Item")
-			if item=="Sword" or item=="Mace" or item=="Ram" then
-				set("right",pose(25,-12,16),.75); set("rightElbow",pose(35),.8)
+			if item=="Sword" then
+				set("right",pose(38,-18,28),.88); set("rightElbow",pose(48),.9)
+				set("left",pose(18,10,-18),.55); set("body",pose(-4,-8,0),.45)
+			elseif item=="Mace" or item=="Ram" then
+				set("right",pose(58,-24,24),.9); set("rightElbow",pose(62),.9)
+				set("left",pose(24,12,-20),.55); set("body",pose(4,10,0),.5)
 			elseif item=="Bow" then
 				set("left",pose(35,0,-12),.7); set("right",pose(30,0,12),.7)
 			end
@@ -92,9 +99,15 @@ function Animation.start()
 			local t,w=envelope(now,actor:GetAttribute("SwingUntil") or 0,.40)
 			if w>0 then
 				local extend=math.clamp((t-.18)/.22,0,1)
-				set("right",pose(30+55*extend,0,8),w); set("left",pose(30+55*extend,0,-8),w)
-				set("rightElbow",pose(60*(1-extend)),w); set("leftElbow",pose(60*(1-extend)),w)
-				set("body",pose(-8*extend),w)
+				-- Hard-lock both arms and the braced torso/hips over locomotion.
+				-- This is applied after Roblox's Animator, so walk cycles cannot steal one shoulder.
+				set("right",pose(32+58*extend,0,9),w,true)
+				set("left",pose(32+58*extend,0,-9),w,true)
+				set("rightElbow",pose(68*(1-extend)),w,true)
+				set("leftElbow",pose(68*(1-extend)),w,true)
+				set("body",CFrame.new(0,0,-.08*extend)*pose(-10*extend,0,0),w,true)
+				set("rightHip",pose(-12,0,5),w,true)
+				set("leftHip",pose(-12,0,-5),w,true)
 			end
 			t,w=envelope(now,actor:GetAttribute("GrabUntil") or 0,.52)
 			if w>0 then
@@ -109,16 +122,24 @@ function Animation.start()
 				if kind=="Sword" then
 					local sweep=math.clamp((t-.20)/.30,0,1)
 					local alternate=if (actor:GetAttribute("AttackIndex") or 0)%2==0 then 1 else -1
-					set("right",pose(85,(-65+125*sweep)*alternate,40-60*sweep),w)
-					set("rightElbow",pose(30*(1-sweep)),w); set("body",pose(-6,(-18+40*sweep)*alternate,0),w)
-					set("left",pose(20,0,-20),w)
+					set("right",pose(92,(-72+142*sweep)*alternate,46-70*sweep),w,true)
+					set("rightElbow",pose(38*(1-sweep)),w,true)
+					set("left",pose(26,-12*alternate,-26),w,true)
+					set("body",pose(-8,(-24+52*sweep)*alternate,0),w,true)
+					set("rightHip",pose(-8,8*alternate,4),w,true)
+					set("leftHip",pose(-16,-5*alternate,-4),w,true)
 				elseif kind=="Bow" then
 					set("left",pose(90,-65,-6),w); set("right",pose(70,65,10),w)
 					set("rightElbow",pose(105*(1-math.clamp((t-.55)*4,0,1))),w)
 					set("body",pose(0,-30,0),w)
 				elseif kind=="Mace" or kind=="Ram" then
-					local strike=math.clamp((t-.45)/.25,0,1)
-					set("right",pose(150-85*strike,-20,22),w); set("body",pose(10-22*strike,20-35*strike,0),w)
+					local strike=math.clamp((t-.42)/.30,0,1)
+					set("right",pose(162-98*strike,-28,30),w,true)
+					set("rightElbow",pose(82-54*strike),w,true)
+					set("left",pose(34,18,-28),w,true)
+					set("body",pose(14-30*strike,26-48*strike,0),w,true)
+					set("rightHip",pose(-18,10,5),w,true)
+					set("leftHip",pose(-10,-6,-5),w,true)
 				elseif kind=="Shield" then set("left",pose(90,-15,-18),w)
 				else
 					set("right",pose(55,0,15),w); set("body",pose(-12),w)
@@ -139,8 +160,14 @@ function Animation.start()
 					local basis=ID
 					if joint:IsA("Motor6D") then basis=joint.C1.Rotation
 					elseif joint.Attachment1 then basis=joint.Attachment1.CFrame.Rotation end
-					local layer=ID:Lerp(offset,weights[info.role] or 1)
-					joint.Transform=info.base*basis:Inverse()*layer*basis
+					local weight=weights[info.role] or 1
+					if absolute[info.role] then
+						local target=basis:Inverse()*offset*basis
+						joint.Transform=info.base:Lerp(target,weight)
+					else
+						local layer=ID:Lerp(offset,weight)
+						joint.Transform=info.base*basis:Inverse()*layer*basis
+					end
 					info.applied=true
 				end
 			end
