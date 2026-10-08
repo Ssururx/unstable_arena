@@ -1,6 +1,59 @@
 --!nonstrict
 -- Original, script-free models shared by pickups, held equipment and hotbar previews.
+local ReplicatedStorage=game:GetService("ReplicatedStorage")
 local Models={}
+
+local function connected(handle,part,root)
+	for _,d in root:GetDescendants() do
+		if d:IsA("WeldConstraint") and ((d.Part0==handle and d.Part1==part) or (d.Part1==handle and d.Part0==part)) then
+			return true
+		end
+	end
+	return false
+end
+
+local function attachImported(root,id,preview)
+	if id~="Sword" and id~="Mace" then return false end
+	local folder=ReplicatedStorage:FindFirstChild("WeaponMeshes")
+	local template=folder and folder:FindFirstChild(id)
+	if not template then return false end
+	local clone=template:Clone()
+	clone.Name=id.."Mesh"
+	clone.Parent=root
+
+	local handle=if clone:IsA("BasePart") then clone else clone:FindFirstChild("Handle",true)
+	if not handle or not handle:IsA("BasePart") then
+		warn("[UnstableArena] "..id.." mesh template needs exactly one BasePart named Handle")
+		clone:Destroy(); return false
+	end
+	local grip=template:GetAttribute("GripOffset")
+	if typeof(grip)~="CFrame" then grip=CFrame.identity end
+
+	for _,d in clone:GetDescendants() do
+		if d:IsA("BasePart") then
+			d.CanCollide=false; d.CanTouch=false; d.CanQuery=false; d.Massless=true
+			d.Anchored=preview==true
+		end
+	end
+	if clone:IsA("BasePart") then
+		clone.CFrame=root.CFrame*grip
+	elseif clone:IsA("Model") then
+		clone:PivotTo(root.CFrame*grip)
+	end
+
+	if not preview then
+		if clone:IsA("Model") then
+			for _,d in clone:GetDescendants() do
+				if d:IsA("BasePart") and d~=handle and not connected(handle,d,clone) then
+					local weld=Instance.new("WeldConstraint"); weld.Part0=handle; weld.Part1=d; weld.Parent=d
+				end
+			end
+		end
+		local gripWeld=Instance.new("WeldConstraint"); gripWeld.Part0=root; gripWeld.Part1=handle; gripWeld.Parent=handle
+	end
+	return true
+end
+
 local bronze=Color3.fromRGB(160,120,62)
 local edge=Color3.fromRGB(207,174,108)
 local iron=Color3.fromRGB(65,70,72)
@@ -30,6 +83,7 @@ function Models.attach(root,id,preview)
 		return piece(name,Vector3.new(depth,radius*2,radius*2),cf*CFrame.Angles(0,math.pi/2,0),color,Enum.Material.Metal,Enum.PartType.Cylinder)
 	end
 	if id=="Sword" then
+		if attachImported(root,id,preview) then return end
 		piece("LeatherGrip",Vector3.new(.25,.85,.28),CFrame.new(0,-.48,0),leather,Enum.Material.Fabric)
 		for i=0,5 do piece("GripWrap",Vector3.new(.28,.055,.3),CFrame.new(0,-.82+i*.12,0),wood) end
 		ball("Pommel",Vector3.new(.45,.3,.38),Vector3.new(0,-1,0),bronze)
@@ -54,6 +108,7 @@ function Models.attach(root,id,preview)
 		disk("BossRim",.43,.09,CFrame.new(0,0,-.18),bronze)
 		ball("ShieldBoss",Vector3.new(.64,.64,.34),Vector3.new(0,0,-.27),iron)
 	elseif id=="Mace" then
+		if attachImported(root,id,preview) then return end
 		piece("MaceGrip",Vector3.new(.30,1.55,.30),CFrame.new(0,-.35,0),leather)
 		for _,y in {-.98,.38} do ball("GripCap",Vector3.new(.40,.20,.40),Vector3.new(0,y,0),bronze) end
 		for i=1,5 do
