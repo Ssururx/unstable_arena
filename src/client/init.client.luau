@@ -3,6 +3,7 @@ local Players=game:GetService("Players")
 local ReplicatedStorage=game:GetService("ReplicatedStorage")
 local RunService=game:GetService("RunService")
 local UIS=game:GetService("UserInputService")
+local ContextActionService=game:GetService("ContextActionService")
 local GuiService=game:GetService("GuiService")
 local TweenService=game:GetService("TweenService")
 local Debris=game:GetService("Debris")
@@ -105,9 +106,9 @@ local hazardText=label(hazardPanel,"",UDim2.new(1,-12,1,0),UDim2.fromOffset(6,0)
 local crosshair=label(gui,"+",UDim2.fromOffset(24,24),UDim2.new(.5,-12,.5,-12),24)
 crosshair.TextTransparency=.15
 local lockPanel=panel("Lock",UDim2.fromOffset(190,32),UDim2.fromScale(.02,.97),Vector2.new(0,1))
-local lockButton=button(lockPanel,"RSHIFT LOCK: OFF",UDim2.fromScale(1,1),UDim2.new(),function() wantLock=not wantLock end)
+local lockButton=button(lockPanel,"LSHIFT LOCK: OFF",UDim2.fromScale(1,1),UDim2.new(),function() wantLock=not wantLock end)
 lockPanel.BackgroundTransparency=1; lockButton.BackgroundTransparency=.35
-local controlHint=label(gui,"E PUSH  •  Q GRAB  •  F USE  •  SHIFT SPRINT  •  X DASH  •  C SLIDE  •  G RUSH",UDim2.fromOffset(650,22),UDim2.new(.5,-325,1,-167),11)
+local controlHint=label(gui,"E PUSH  •  Q GRAB  •  F USE  •  CTRL SPRINT  •  X DASH  •  C SLIDE  •  G RUSH",UDim2.fromOffset(650,22),UDim2.new(.5,-325,1,-167),11)
 local spec=panel("Spectator",UDim2.fromOffset(450,88),UDim2.fromScale(.5,.82),Vector2.new(.5,1))
 local specTitle=label(spec,"WATCH FROM THE STANDS",UDim2.new(1,-12,0,26),UDim2.fromOffset(6,3),14)
 local function character(actor) return if actor:IsA("Player") then actor.Character else actor end
@@ -142,11 +143,21 @@ local povButton=button(spec,"POV: THIRD",UDim2.fromOffset(133,38),UDim2.fromOffs
 	if not following then cycle(1) end
 	firstPerson=not firstPerson
 end)
+local INPUT_PRIORITY=Enum.ContextActionPriority.High.Value+200
+ContextActionService:BindActionAtPriority("ArenaShiftLock",function(_,state)
+	if state==Enum.UserInputState.Begin and not GuiService.MenuIsOpen and not UIS:GetFocusedTextBox() then
+		wantLock=not wantLock
+	end
+	return Enum.ContextActionResult.Sink
+end,false,INPUT_PRIORITY,Enum.KeyCode.LeftShift)
+ContextActionService:BindActionAtPriority("ArenaDisableRightShift",function()
+	return Enum.ContextActionResult.Sink
+end,false,INPUT_PRIORITY+1,Enum.KeyCode.RightShift)
+
 UIS.InputBegan:Connect(function(input,processed)
 	if processed or UIS:GetFocusedTextBox() then return end
 	local key=input.KeyCode
-	if key == Enum.KeyCode.LeftShift then action:FireServer("Sprint",true)
-	elseif key == Enum.KeyCode.RightShift then wantLock=not wantLock
+	if key == Enum.KeyCode.LeftControl then action:FireServer("Sprint",true)
 	elseif key == Enum.KeyCode.One then action:FireServer("SelectSlot",1)
 	elseif key == Enum.KeyCode.Two then action:FireServer("SelectSlot",2)
 	elseif key == Enum.KeyCode.Three then action:FireServer("SelectSlot",3)
@@ -167,7 +178,7 @@ end)
 UIS.WindowFocusReleased:Connect(function() action:FireServer("Sprint",false) end)
 GuiService.MenuOpened:Connect(function() action:FireServer("Sprint",false) end)
 UIS.InputEnded:Connect(function(input)
-	if input.KeyCode == Enum.KeyCode.LeftShift then action:FireServer("Sprint",false) end
+	if input.KeyCode == Enum.KeyCode.LeftControl then action:FireServer("Sprint",false) end
 end)
 player.CharacterAdded:Connect(function() restoreCamera(); wantLock=false; action:FireServer("Sprint",false) end)
 local effects=Instance.new("Folder"); effects.Name="ArenaLocalEffects"; effects.Parent=workspace
@@ -411,8 +422,8 @@ local function updateUI()
 	controlHint.Visible=not UIS.TouchEnabled and active and not following
 	local pushWait=math.max(0,(cooldown.Push or 0)-os.clock())
 	controlHint.Text=if UIS:GetLastInputType()==Enum.UserInputType.Gamepad1 then "R2 PUSH  •  X GRAB  •  L2 ITEM  •  B DASH"
-		elseif pushWait>0 then string.format("PUSH %.1fs  •  Q GRAB  •  F USE  •  SHIFT SPRINT  •  X DASH  •  C SLIDE  •  G RUSH",pushWait)
-		else "E PUSH  •  Q GRAB  •  F USE  •  SHIFT SPRINT  •  X DASH  •  C SLIDE  •  G RUSH"
+		elseif pushWait>0 then string.format("PUSH %.1fs  •  Q GRAB  •  F USE  •  CTRL SPRINT  •  X DASH  •  C SLIDE  •  G RUSH",pushWait)
+		else "E PUSH  •  Q GRAB  •  F USE  •  CTRL SPRINT  •  X DASH  •  C SLIDE  •  G RUSH"
 	local texts=if UIS.TouchEnabled then {Push="PUSH",Grab="GRAB",UseItem="ITEM"}
 		elseif UIS.GamepadEnabled and not UIS.KeyboardEnabled then {Push="PUSH · R2",Grab="GRAB · X",UseItem="ITEM · L2"}
 		else {Push="PUSH\nE / Click",Grab="GRAB\nQ",UseItem="ITEM\nF"}
@@ -421,7 +432,7 @@ local function updateUI()
 		b.Text=if remaining > 0 then string.format("%.1fs",remaining) else texts[kind]
 		b.BackgroundColor3=if remaining > 0 then colors.bg else colors.soft
 	end
-	lockButton.Text=if locked then "RSHIFT LOCK: ON" else "RSHIFT LOCK: OFF"
+	lockButton.Text=if locked then "LSHIFT LOCK: ON" else "LSHIFT LOCK: OFF"
 	lockPanel.Visible=UIS.MouseEnabled and not following
 	crosshair.Text=if os.clock()<hitUntil then "×" else "+"
 	crosshair.TextColor3=if os.clock()<hitUntil then colors.gold else colors.text
