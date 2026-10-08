@@ -14,7 +14,7 @@ local function usesAttr(i) return "Inventory"..i.."Uses" end
 function Items.new(round,arena,combat,fx)
 	return setmetatable({
 		round=round,arena=arena,combat=combat,fx=fx,
-		arrows={},maces={},nextSpawn=0,nextProjectile=0,
+		arrows={},maces={},nextSpawn=0,nextProjectile=0,spawnCursor=0,
 	},Items)
 end
 
@@ -89,7 +89,7 @@ function Items:Clear(p)
 end
 
 function Items:Reset()
-	self.arrows={}; self.maces={}; self.nextSpawn=0
+	self.arrows={}; self.maces={}; self.nextSpawn=0; self.spawnCursor=0
 	for _,p in Players:GetPlayers() do self:Clear(p) end
 end
 
@@ -113,13 +113,47 @@ function Items:Pickup(p,slab,pickup,id)
 end
 
 function Items:Spawn()
-	local choices={}; local count=0
+	local choices={}; local occupied={}; local count=0
+	local spawnConfig=Config.WeaponSpawns
 	for _,slab in self.arena.slabs do
-		if slab.pickup and slab.pickup.Parent then count+=1 end
-		if not slab.broken and not slab.pickup and slab.stress<slab.durability*.67 then table.insert(choices,slab) end
+		if slab.pickup and slab.pickup.Parent then
+			count+=1; table.insert(occupied,slab.pickup.Position)
+		end
+		if not slab.broken and not slab.pickup and slab.stress<slab.durability*.67 then
+			local offset=slab.part.Position-Config.Arena.Center
+			local radial=Vector3.new(offset.X,0,offset.Z).Magnitude
+			if radial>=spawnConfig.MinRadius and radial<=spawnConfig.MaxRadius then
+				table.insert(choices,slab)
+			end
+		end
 	end
 	if count>=8 or #choices==0 then return end
-	local slab=choices[math.random(#choices)]
+
+	-- Cycle through evenly spaced annulus targets instead of picking a fully random slab.
+	-- This keeps pickups central enough to contest while reserving a no-spawn hole at the exact center.
+	local slots=spawnConfig.SectorCount*spawnConfig.RingCount
+	self.spawnCursor=(self.spawnCursor%slots)+1
+	local cursor=self.spawnCursor-1
+	local sector=cursor%spawnConfig.SectorCount
+	local ring=math.floor(cursor/spawnConfig.SectorCount)%spawnConfig.RingCount
+	local angle=(sector+(ring%2)*.5)/spawnConfig.SectorCount*math.pi*2
+	local ringAlpha=(ring+.5)/spawnConfig.RingCount
+	local radius=spawnConfig.MinRadius+(spawnConfig.MaxRadius-spawnConfig.MinRadius)*ringAlpha
+	local target=Config.Arena.Center+Vector3.new(math.sin(angle)*radius,0,math.cos(angle)*radius)
+
+	local slab=nil; local best=math.huge
+	for _,candidate in choices do
+		local score=(candidate.part.Position-target).Magnitude
+		for _,position in occupied do
+			local separation=(candidate.part.Position-position).Magnitude
+			if separation<spawnConfig.MinSeparation then
+				score+=(spawnConfig.MinSeparation-separation)*6+45
+			end
+		end
+		if score<best then best=score; slab=candidate end
+	end
+	if not slab then return end
+
 	local ids={"Sword","Sword","Mace","Shield","Shield","Anchor","Ram","Brace","Weight","Bow","Bow"}
 	local id=ids[math.random(#ids)]; local def=Config.Items[id]
 	local pickup=U.part(slab.model,"Pickup_"..id,Vector3.new(1.6,1.2,1.6),slab.part.CFrame*CFrame.new(0,3.8,0),def.Color,Enum.Material.Metal)
