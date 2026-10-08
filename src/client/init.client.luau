@@ -235,7 +235,7 @@ local function effect(kind,a,b)
 
 	if kind=="DangerCircle" or kind=="MaceWarning" then
 		local radius=if kind=="MaceWarning" then 4 else (if typeof(b)=="number" then b else 12)
-		local duration=if kind=="MaceWarning" then b else 1.15
+		local duration=if kind=="MaceWarning" then b else (Config.Hazards.MeteorTelegraphTime+Config.Hazards.MeteorFallTime)
 		local world=workspace:FindFirstChild("UnstableArenaWorld")
 		local arena=world and world:FindFirstChild("RoundArena"); if not arena then return end
 		local params=RaycastParams.new(); params.FilterType=Enum.RaycastFilterType.Include; params.FilterDescendantsInstances={arena}
@@ -256,13 +256,18 @@ local function effect(kind,a,b)
 		end
 		Debris:AddItem(marker,duration); return
 	elseif kind=="MeteorIncoming" and typeof(b)=="Vector3" then
-		local rock=basePart(); rock.Shape=Enum.PartType.Ball; rock.Size=Vector3.one*3.8
+		local rock=basePart(); rock.Shape=Enum.PartType.Ball
+		rock.Size=Vector3.one*Config.Hazards.MeteorVisualSize
 		rock.Material=Enum.Material.Rock; rock.Color=Color3.fromRGB(83,55,40); rock.Position=a
-		local fire=Instance.new("Fire"); fire.Size=5; fire.Heat=4; fire.Parent=rock
-		TweenService:Create(rock,TweenInfo.new(1.12,Enum.EasingStyle.Linear),{Position=b}):Play()
-		Debris:AddItem(rock,1.18); return
+		local fire=Instance.new("Fire"); fire.Size=Config.Hazards.MeteorVisualSize*1.45; fire.Heat=7; fire.Parent=rock
+		local light=Instance.new("PointLight"); light.Color=Color3.fromRGB(255,132,62)
+		light.Range=Config.Hazards.MeteorVisualSize*5; light.Brightness=3.2; light.Parent=rock
+		TweenService:Create(rock,TweenInfo.new(Config.Hazards.MeteorFallTime,Enum.EasingStyle.Linear),{Position=b}):Play()
+		Debris:AddItem(rock,Config.Hazards.MeteorFallTime+.08); return
 	elseif kind=="MeteorImpact" then
-		burst(a,Color3.fromRGB(225,119,58),24,4.5); return
+		burst(a,Color3.fromRGB(225,119,58),38,7); return
+	elseif kind=="PlateImpact" then
+		burst(a,Color3.fromRGB(171,143,99),18,3.2); return
 	elseif kind=="Mace" and typeof(b)=="table" then
 		local projectile=flyingMaces[b.id]
 		if not projectile or not projectile.head.Parent then
