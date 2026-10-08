@@ -1,6 +1,6 @@
 --!strict
 return table.freeze({
-	Version = "0.6.0-arena-polish",
+	Version = "0.7.0-impact-pass",
 	Arena = {
 		Center = Vector3.new(0, 122, 0),
 		Radius = 110,
@@ -57,8 +57,20 @@ return table.freeze({
 		Warning = 5,
 		MeteorDuration = 12,
 		LionDuration = 18,
+		MeteorVisualSize = 8.5,
+		MeteorFallHeight = 105,
+		MeteorTelegraphTime = 1.05,
+		MeteorFallTime = 0.34,
+		MeteorImpactTilt = 9.5,
+		MeteorImpactTiltClamp = 15,
 	},
-	Slabs = { Grace = 14, DurabilityMin = 44, DurabilityMax = 60, WarningTime = 1.7 },
+	Slabs = {
+		Grace = 14,
+		DurabilityMin = 44,
+		DurabilityMax = 60,
+		WarningTime = 1.7,
+		StressMultiplier = 2.35,
+	},
 	Maps = {
 		{
 			Id = "Coliseum",
@@ -77,6 +89,13 @@ return table.freeze({
 		Color3.fromRGB(156, 124, 255), Color3.fromRGB(255, 211, 94),
 		Color3.fromRGB(86, 226, 174), Color3.fromRGB(255, 137, 211),
 		Color3.fromRGB(153, 214, 255), Color3.fromRGB(217, 200, 174),
+	},
+	WeaponSpawns = {
+		MinRadius = 22,
+		MaxRadius = 70,
+		RingCount = 3,
+		SectorCount = 8,
+		MinSeparation = 20,
 	},
 	Items = {
 		Sword = { Name = "Gladius", Hint = "Fast close-range slash", Uses = 5, Color = Color3.fromRGB(205, 205, 198) },
