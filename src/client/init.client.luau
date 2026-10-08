@@ -10,7 +10,9 @@ local Debris=game:GetService("Debris")
 local CollectionService=game:GetService("CollectionService")
 local Hotbar=require(script.Hotbar)
 require(script.CombatAnimation).start()
-local Config=require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
+local Shared=ReplicatedStorage:WaitForChild("Shared")
+local Config=require(Shared:WaitForChild("Config"))
+local ItemModels=require(Shared:WaitForChild("ItemModels"))
 local player=Players.LocalPlayer
 local remotes=ReplicatedStorage:WaitForChild("Remotes")
 local action=remotes:WaitForChild("Action")
@@ -283,9 +285,9 @@ local function effect(kind,a,b)
 		local projectile=flyingMaces[b.id]
 		if not projectile or not projectile.head.Parent then
 			local model=Instance.new("Model"); model.Name="ThrownMace"; model.Parent=effects
-			local head=basePart(); head.Parent=model; head.Name="IronHead"; head.Transparency=0
-			head.Material=Enum.Material.Metal; head.Color=Color3.fromRGB(78,81,79)
-			head.Shape=Enum.PartType.Ball; head.Size=Vector3.one*1.25; head.Position=a
+			local head=basePart(); head.Parent=model; head.Name="ProjectileRoot"
+			head.Transparency=1; head.Size=Vector3.one*.12; head.Position=a
+			ItemModels.attach(head,"Mace",false)
 			local source=basePart(); source.Parent=model; source.Transparency=1; source.Size=Vector3.one*.1
 			local from=Instance.new("Attachment"); from.Parent=source
 			local to=Instance.new("Attachment"); to.Parent=head
