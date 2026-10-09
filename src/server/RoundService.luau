@@ -168,6 +168,7 @@ function Round:Cycle()
 		local team=Rules.teamFor(i,Rules.teamSize(mode))
 		actor:SetAttribute("TeamId",team); actor:SetAttribute("InRound",true)
 		self.alive[actor]=true; self.combat.credit[actor]=nil; self.items:Clear(actor)
+		actor:SetAttribute("Stamina",Config.Stamina.Max); actor:SetAttribute("StaminaRegenAt",0)
 		actor:SetAttribute("Adrenaline",0); actor:SetAttribute("AdrenalineUntil",0); actor:SetAttribute("Sprinting",false)
 		hum.PlatformStand=false; root.AssemblyLinearVelocity=Vector3.zero; root.AssemblyAngularVelocity=Vector3.zero
 		local char=U.character(actor); char:PivotTo(points[i]); root.Anchored=true

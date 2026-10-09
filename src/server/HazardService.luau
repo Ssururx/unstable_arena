@@ -1,5 +1,4 @@
 --!nonstrict
-local Debris=game:GetService("Debris")
 local Config=require(game:GetService("ReplicatedStorage").Shared.Config)
 local U=require(script.Parent.Util)
 local LionRig=require(script.Parent.LionRig)
@@ -69,20 +68,19 @@ end
 
 function Hazards:ImpactMeteor(position,slab)
 	if self.round.phase~="Live" then return end
-	if slab and not slab.broken then
-		-- A direct meteor hit is catastrophic: the exact struck tile fractures away immediately.
-		self.arena:Break(slab)
-	end
-	self.arena:ImpactTilt(position,Config.Hazards.MeteorImpactTilt)
+	-- Break the exact warned stone, not whichever tile a second ray happens to find.
+	if not slab or slab.broken or not slab.part.Parent then return end
+	self.arena:Break(slab)
+	self.arena:MeteorImpulse(position)
 	for _,actor in self.round:Active() do
 		local root=U.root(actor)
 		if root then
 			local delta=root.Position-position
 			local flat=Vector3.new(delta.X,0,delta.Z)
 			local d=flat.Magnitude
-			if d<12 and math.abs(delta.Y)<10 then
+			if d<Config.Hazards.MeteorRadius and math.abs(delta.Y)<12 then
 				local direction=if d>.1 then flat.Unit else Vector3.xAxis
-				self.combat:Knock(actor,direction*(56*(1-d/15))+Vector3.new(0,12,0),nil)
+				self.combat:Knock(actor,direction*(56*(1-d/(Config.Hazards.MeteorRadius+3)))+Vector3.new(0,12,0),nil)
 			end
 		end
 	end
@@ -96,27 +94,28 @@ function Hazards:SpawnMeteor()
 	end
 	if #candidates==0 then return end
 	local slab=candidates[self.rng:NextInteger(1,#candidates)]
-	local target=slab.part.Position+Vector3.new(self.rng:NextNumber(-2.2,2.2),3,self.rng:NextNumber(-2.2,2.2))
 	local event=self.current
-	local totalTime=Config.Hazards.MeteorTelegraphTime+Config.Hazards.MeteorFallTime
-	local warning={position=target,radius=12,untilTime=os.clock()+totalTime}
+	local duration=Config.Hazards.MeteorLeadTime+Config.Hazards.MeteorFallTime
+	local localPoint=Vector3.new(0,Config.Arena.Thickness/2+.10,0)
+	local target=slab.part.CFrame:PointToWorldSpace(localPoint)
+	local warning={position=target,slab=slab,radius=Config.Hazards.MeteorRadius,untilTime=os.clock()+duration}
 	table.insert(self.warnings,warning)
-	self.fx:FireAllClients("DangerCircle",target,12)
-
-	-- Telegraph first, then let the meteor itself cross the sky extremely fast.
-	task.delay(Config.Hazards.MeteorTelegraphTime,function()
-		if self.current~=event or not event or self.round.phase~="Live" or slab.broken then return end
-		self.fx:FireAllClients(
-			"MeteorIncoming",
-			target+Vector3.new(0,Config.Hazards.MeteorFallHeight,0),
-			target
-		)
+	self.fx:FireAllClients("MeteorTelegraph",target,{
+		part=slab.part,localPoint=localPoint,radius=warning.radius,endsAt=workspace:GetServerTimeNow()+duration,
+	})
+	local function current()
+		return self.current==event and event~=nil and self.round.phase=="Live" and not slab.broken and slab.part.Parent~=nil
+	end
+	task.delay(Config.Hazards.MeteorLeadTime,function()
+		if not current() then return end
+		local point=slab.part.CFrame:PointToWorldSpace(localPoint)
+		self.fx:FireAllClients("MeteorIncoming",point+Vector3.new(0,Config.Hazards.MeteorHeight,0),{
+			part=slab.part,localPoint=localPoint,target=point,endsAt=workspace:GetServerTimeNow()+Config.Hazards.MeteorFallTime,
+		})
 	end)
-	task.delay(totalTime,function()
+	task.delay(duration,function()
 		local index=table.find(self.warnings,warning); if index then table.remove(self.warnings,index) end
-		if self.current==event and event and self.round.phase=="Live" and not slab.broken then
-			self:ImpactMeteor(target,slab)
-		end
+		if current() then self:ImpactMeteor(slab.part.CFrame:PointToWorldSpace(localPoint),slab) end
 	end)
 end
 
@@ -137,6 +136,7 @@ end
 function Hazards:ThreatAt(position)
 	local escape=Vector3.zero
 	for _,warning in self.warnings do
+		if warning.slab and warning.slab.part.Parent then warning.position=warning.slab.part.CFrame:PointToWorldSpace(Vector3.new(0,Config.Arena.Thickness/2+.10,0)) end
 		local delta=position-warning.position
 		local flat=Vector3.new(delta.X,0,delta.Z)
 		if flat.Magnitude<warning.radius+7 and flat.Magnitude>.05 then escape+=flat.Unit*(warning.radius+7-flat.Magnitude) end
@@ -214,7 +214,7 @@ function Hazards:Step()
 		h.started=true
 		if h.kind=="Lions" then self:StartLions() end
 	end
-	if h.kind=="Meteor" and now>=h.nextPulse then
+	if h.kind=="Meteor" and now>=h.nextPulse and now+Config.Hazards.MeteorLeadTime+Config.Hazards.MeteorFallTime<h.endAt then
 		h.nextPulse=now+self.rng:NextNumber(1.25,1.8)
 		self:SpawnMeteor()
 	elseif h.kind=="Lions" and now>=self.nextLionThink then

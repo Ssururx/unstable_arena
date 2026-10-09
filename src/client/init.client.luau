@@ -9,10 +9,9 @@ local TweenService=game:GetService("TweenService")
 local Debris=game:GetService("Debris")
 local CollectionService=game:GetService("CollectionService")
 local Hotbar=require(script.Hotbar)
+local meteorEffect=require(script.MeteorEffects).new()
 require(script.CombatAnimation).start()
-local Shared=ReplicatedStorage:WaitForChild("Shared")
-local Config=require(Shared:WaitForChild("Config"))
-local ItemModels=require(Shared:WaitForChild("ItemModels"))
+local Config=require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
 local player=Players.LocalPlayer
 local remotes=ReplicatedStorage:WaitForChild("Remotes")
 local action=remotes:WaitForChild("Action")
@@ -74,7 +73,7 @@ local function send(kind)
 	end
 	action:FireServer(kind,aim)
 end
-actionButtons.Push=button(actionPanel,"PUSH\nE / Click",UDim2.fromOffset(88,62),UDim2.fromOffset(6,7),function() send("Push") end)
+actionButtons.Push=button(actionPanel,"PUSH\nE",UDim2.fromOffset(88,62),UDim2.fromOffset(6,7),function() send("Push") end)
 actionButtons.Grab=button(actionPanel,"GRAB\nQ",UDim2.fromOffset(80,62),UDim2.fromOffset(99,7),function() send("Grab") end)
 actionButtons.UseItem=button(actionPanel,"ITEM\nF",UDim2.fromOffset(88,62),UDim2.fromOffset(184,7),function() send("UseItem") end)
 for _,b in actionButtons do b.TextWrapped=true end
@@ -92,6 +91,10 @@ itemHint.TextColor3=Color3.fromRGB(222,210,185)
 local slotButtons=Hotbar.build(inventory,function(slot)
 	if not following and not GuiService.MenuIsOpen then action:FireServer("SelectSlot",slot) end
 end)
+local stamina=panel("Stamina",UDim2.fromOffset(224,5),UDim2.new(.5,0,1,-155),Vector2.new(.5,1))
+local staminaFill=Instance.new("Frame"); staminaFill.BorderSizePixel=0; staminaFill.Size=UDim2.fromScale(1,1)
+staminaFill.BackgroundColor3=Color3.fromRGB(119,185,167); staminaFill.Parent=stamina; roundCorner(staminaFill,3)
+local staminaText=label(stamina,"STAMINA",UDim2.new(1,0,0,17),UDim2.fromOffset(0,-19),10)
 local adrenaline=panel("Adrenaline",UDim2.fromOffset(224,5),UDim2.new(.5,0,1,-122),Vector2.new(.5,1))
 adrenaline.BackgroundTransparency=.4
 local adrenalineTrack=Instance.new("Frame"); adrenalineTrack.Size=UDim2.fromScale(1,1)
@@ -110,7 +113,7 @@ crosshair.TextTransparency=.15
 local lockPanel=panel("Lock",UDim2.fromOffset(190,32),UDim2.fromScale(.02,.97),Vector2.new(0,1))
 local lockButton=button(lockPanel,"LSHIFT LOCK: OFF",UDim2.fromScale(1,1),UDim2.new(),function() wantLock=not wantLock end)
 lockPanel.BackgroundTransparency=1; lockButton.BackgroundTransparency=.35
-local controlHint=label(gui,"E PUSH  •  Q GRAB  •  F USE  •  CTRL SPRINT  •  X DASH  •  C SLIDE  •  G RUSH",UDim2.fromOffset(650,22),UDim2.new(.5,-325,1,-167),11)
+local controlHint=label(gui,"E PUSH  •  Q GRAB  •  F USE  •  CTRL SPRINT  •  X DASH  •  C SLIDE  •  G RUSH",UDim2.fromOffset(650,22),UDim2.new(.5,-325,1,-196),11)
 local spec=panel("Spectator",UDim2.fromOffset(450,88),UDim2.fromScale(.5,.82),Vector2.new(.5,1))
 local specTitle=label(spec,"WATCH FROM THE STANDS",UDim2.new(1,-12,0,26),UDim2.fromOffset(6,3),14)
 local function character(actor) return if actor:IsA("Player") then actor.Character else actor end
@@ -172,7 +175,10 @@ UIS.InputBegan:Connect(function(input,processed)
 	elseif key == Enum.KeyCode.X or key == Enum.KeyCode.ButtonB then send("Dash")
 	elseif key == Enum.KeyCode.C then send("Slide")
 	elseif key == Enum.KeyCode.G then send("Adrenaline")
-	elseif key == Enum.KeyCode.E or key == Enum.KeyCode.ButtonR2 or input.UserInputType == Enum.UserInputType.MouseButton1 then send("Push")
+	elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
+		local id=player:GetAttribute("Item")
+		send(if id=="Sword" or id=="Mace" or id=="Bow" then "UseItem" else "Push")
+	elseif key == Enum.KeyCode.E or key == Enum.KeyCode.ButtonR2 then send("Push")
 	elseif key == Enum.KeyCode.Q or key == Enum.KeyCode.ButtonX then send("Grab")
 	elseif key == Enum.KeyCode.F or key == Enum.KeyCode.ButtonL2 then send("UseItem")
 	end
@@ -184,39 +190,9 @@ UIS.InputEnded:Connect(function(input)
 end)
 player.CharacterAdded:Connect(function() restoreCamera(); wantLock=false; action:FireServer("Sprint",false) end)
 local effects=Instance.new("Folder"); effects.Name="ArenaLocalEffects"; effects.Parent=workspace
-local rangeSegments={}
-for i=1,48 do
-	local p=Instance.new("Part"); p.Name="MaceRangeEdge"; p.Anchored=true
-	p.CanCollide=false; p.CanQuery=false; p.CanTouch=false; p.CastShadow=false
-	p.Material=Enum.Material.Neon; p.Color=colors.gold; p.Transparency=1; p.Parent=effects
-	rangeSegments[i]=p
-end
-local rangeAt=0
-local function updateRange(root,visible)
-	if not visible then for _,p in rangeSegments do p.Transparency=1 end; return end
-	if os.clock()<rangeAt then return end
-	rangeAt=os.clock()+.05
-	local world=workspace:FindFirstChild("UnstableArenaWorld")
-	local arena=world and world:FindFirstChild("RoundArena")
-	if not arena then return end
-	local params=RaycastParams.new(); params.FilterType=Enum.RaycastFilterType.Include; params.FilterDescendantsInstances={arena}
-	local radius=Config.Combat.MaceLockRange
-	for i,p in rangeSegments do
-		local angle=(i-1)/#rangeSegments*math.pi*2
-		local offset=Vector3.new(math.sin(angle),0,math.cos(angle))*radius
-		local hit=workspace:Raycast(root.Position+offset+Vector3.new(0,35,0),Vector3.new(0,-75,0),params)
-		if hit and not hit.Instance.Parent:GetAttribute("Broken") then
-			p.Size=Vector3.new(.12,.04,radius*math.pi*2/#rangeSegments*.74)
-			local tangent=Vector3.new(math.cos(angle),0,-math.sin(angle))
-			tangent=(tangent-hit.Normal*tangent:Dot(hit.Normal)).Unit
-			p.CFrame=CFrame.lookAt(hit.Position+hit.Normal*.12,hit.Position+hit.Normal*.12+tangent,hit.Normal)
-			p.Transparency=.30
-		else p.Transparency=1 end
-	end
-end
-local flyingMaces={}
 local hitUntil=0
 local function effect(kind,a,b)
+	if meteorEffect(kind,a,b) then return end
 	local camera=workspace.CurrentCamera
 	if typeof(a)~="Vector3" or not camera or (camera.CFrame.Position-a).Magnitude>420 or #effects:GetChildren()>=120 then return end
 
@@ -248,7 +224,7 @@ local function effect(kind,a,b)
 
 	if kind=="DangerCircle" or kind=="MaceWarning" then
 		local radius=if kind=="MaceWarning" then 4 else (if typeof(b)=="number" then b else 12)
-		local duration=if kind=="MaceWarning" then b else (Config.Hazards.MeteorTelegraphTime+Config.Hazards.MeteorFallTime)
+		local duration=if kind=="MaceWarning" then b else 1.15
 		local world=workspace:FindFirstChild("UnstableArenaWorld")
 		local arena=world and world:FindFirstChild("RoundArena"); if not arena then return end
 		local params=RaycastParams.new(); params.FilterType=Enum.RaycastFilterType.Include; params.FilterDescendantsInstances={arena}
@@ -268,44 +244,8 @@ local function effect(kind,a,b)
 			end
 		end
 		Debris:AddItem(marker,duration); return
-	elseif kind=="MeteorIncoming" and typeof(b)=="Vector3" then
-		local rock=basePart(); rock.Shape=Enum.PartType.Ball
-		rock.Size=Vector3.one*Config.Hazards.MeteorVisualSize
-		rock.Material=Enum.Material.Rock; rock.Color=Color3.fromRGB(83,55,40); rock.Position=a
-		local fire=Instance.new("Fire"); fire.Size=Config.Hazards.MeteorVisualSize*1.45; fire.Heat=7; fire.Parent=rock
-		local light=Instance.new("PointLight"); light.Color=Color3.fromRGB(255,132,62)
-		light.Range=Config.Hazards.MeteorVisualSize*5; light.Brightness=3.2; light.Parent=rock
-		TweenService:Create(rock,TweenInfo.new(Config.Hazards.MeteorFallTime,Enum.EasingStyle.Linear),{Position=b}):Play()
-		Debris:AddItem(rock,Config.Hazards.MeteorFallTime+.08); return
 	elseif kind=="MeteorImpact" then
-		burst(a,Color3.fromRGB(225,119,58),38,7); return
-	elseif kind=="PlateImpact" then
-		burst(a,Color3.fromRGB(171,143,99),18,3.2); return
-	elseif kind=="Mace" and typeof(b)=="table" then
-		local projectile=flyingMaces[b.id]
-		if not projectile or not projectile.head.Parent then
-			local model=Instance.new("Model"); model.Name="ThrownMace"; model.Parent=effects
-			local head=basePart(); head.Parent=model; head.Name="ProjectileRoot"
-			head.Transparency=1; head.Size=Vector3.one*.12; head.Position=a
-			ItemModels.attach(head,"Mace",false)
-			local source=basePart(); source.Parent=model; source.Transparency=1; source.Size=Vector3.one*.1
-			local from=Instance.new("Attachment"); from.Parent=source
-			local to=Instance.new("Attachment"); to.Parent=head
-			local chain=Instance.new("Beam"); chain.Attachment0=from; chain.Attachment1=to
-			chain.Width0=.10; chain.Width1=.10; chain.FaceCamera=true
-			chain.Color=ColorSequence.new(Color3.fromRGB(138,128,100)); chain.Segments=10
-			chain.CurveSize0=-1; chain.CurveSize1=1; chain.Parent=head
-			projectile={model=model,head=head,source=source}; flyingMaces[b.id]=projectile
-			Debris:AddItem(model,2)
-			task.delay(2,function() if flyingMaces[b.id]==projectile then flyingMaces[b.id]=nil end end)
-		end
-		projectile.source.Position=b.source
-		TweenService:Create(projectile.head,TweenInfo.new(.055,Enum.EasingStyle.Linear),{Position=b.position}):Play()
-		return
-	elseif kind=="MaceEnd" then
-		local projectile=flyingMaces[b]
-		if projectile then projectile.model:Destroy(); flyingMaces[b]=nil end
-		return
+		burst(a,Color3.fromRGB(225,119,58),38,8); return
 	elseif kind=="MaceImpact" then
 		burst(a,Color3.fromRGB(180,139,78),12,2.3); return
 	elseif kind=="Arrow" then
@@ -345,7 +285,7 @@ fx.OnClientEvent:Connect(function(kind,a,b)
 		local camera=workspace.CurrentCamera
 		if camera and not player:GetAttribute("InRound") then
 			restoreCamera()
-			camera.CFrame=CFrame.lookAt(a.Position-a.LookVector*12+Vector3.new(0,5,0),a.Position+a.LookVector*18+Vector3.new(0,2,0))
+			camera.CFrame=CFrame.lookAt(a.Position-a.LookVector*12+Vector3.new(0,12,0),Config.Arena.Center+Vector3.new(0,12,0))
 		end
 	elseif kind == "Toast" then toast(a)
 	elseif kind == "Cooldown" then cooldown[a]=os.clock()+b
@@ -391,9 +331,14 @@ local function updateUI()
 	Hotbar.update(slotButtons,player,UIS.TouchEnabled)
 	if (player:GetAttribute("ShieldUntil") or 0)>now then itemHint.Text="SHIELD RAISED"
 	elseif (player:GetAttribute("AnchorUntil") or 0)>now then itemHint.Text="ANCHORED"
-	elseif def then itemHint.Text=string.upper(def.Name)..(if UIS.TouchEnabled then " · TAP ITEM" else " · F TO USE")
+	elseif def then itemHint.Text=string.upper(def.Name)..(if UIS.TouchEnabled then " · TAP ITEM" elseif def.Permanent or id=="Bow" then " · CLICK / F" else " · F TO USE")
 	else itemHint.Text="" end
 	inventory.Visible=active
+	stamina.Visible=active
+	local staminaValue=math.clamp(player:GetAttribute("Stamina") or Config.Stamina.Max,0,Config.Stamina.Max)
+	staminaFill.Size=UDim2.fromScale(staminaValue/Config.Stamina.Max,1)
+	staminaFill.BackgroundColor3=if staminaValue<25 then Color3.fromRGB(218,131,87) else Color3.fromRGB(119,185,167)
+	staminaText.Text="STAMINA "..math.floor(staminaValue)
 	local adrenalineValue=math.clamp(player:GetAttribute("Adrenaline") or 0,0,Config.Adrenaline.Max)
 	adrenaline.Visible=active
 	adrenalineFill.Size=UDim2.fromScale(adrenalineValue/Config.Adrenaline.Max,1)
@@ -450,10 +395,6 @@ RunService:BindToRenderStep("UnstableCamera",Enum.RenderPriority.Camera.Value+1,
 	local camera=workspace.CurrentCamera; if not camera then return end
 	local char=player.Character; local hum=char and char:FindFirstChildOfClass("Humanoid")
 	local root=char and char:FindFirstChild("HumanoidRootPart")
-	if hum and root then
-		local showRange=player:GetAttribute("InRound")==true and player:GetAttribute("Item")=="Mace"
-		updateRange(root,showRange)
-	else updateRange(nil,false) end
 	local canLock=wantLock and UIS.MouseEnabled and not following and not GuiService.MenuIsOpen and not UIS:GetFocusedTextBox() and hum and hum.Health > 0
 	if canLock then
 		locked=true; UIS.MouseBehavior=Enum.MouseBehavior.LockCenter

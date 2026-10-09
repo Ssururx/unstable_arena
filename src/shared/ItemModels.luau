@@ -2,7 +2,6 @@
 -- Original, script-free models shared by pickups, held equipment and hotbar previews.
 local ReplicatedStorage=game:GetService("ReplicatedStorage")
 local Models={}
-
 local function connected(handle,part,root)
 	for _,d in root:GetDescendants() do
 		if d:IsA("WeldConstraint") and ((d.Part0==handle and d.Part1==part) or (d.Part1==handle and d.Part0==part)) then
@@ -55,6 +54,7 @@ local function attachImported(root,id,preview)
 	return true
 end
 
+
 local bronze=Color3.fromRGB(160,120,62)
 local edge=Color3.fromRGB(207,174,108)
 local iron=Color3.fromRGB(65,70,72)
@@ -83,20 +83,68 @@ function Models.attach(root,id,preview)
 	local function disk(name,radius,depth,cf,color)
 		return piece(name,Vector3.new(depth,radius*2,radius*2),cf*CFrame.Angles(0,math.pi/2,0),color,Enum.Material.Metal,Enum.PartType.Cylinder)
 	end
+	local function triangle(name,a,b,c,color)
+		local ab,ac,bc=b-a,c-a,c-b
+		if ab:Dot(ab)>ac:Dot(ac) and ab:Dot(ab)>bc:Dot(bc) then c,a=a,c
+		elseif ac:Dot(ac)>bc:Dot(bc) then a,b=b,a end
+		ab,ac,bc=b-a,c-a,c-b
+		local normal=ac:Cross(ab); if normal.Magnitude<.00001 then return end
+		local right=normal.Unit; local back=bc.Unit; local up=back:Cross(right).Unit
+		local height=math.abs(ab:Dot(up))
+		for _,spec in {{(a+b)/2,right,back,math.abs(ab:Dot(back))},{(a+c)/2,-right,-back,math.abs(ac:Dot(back))}} do
+			if spec[4]<.005 or height<.005 then continue end
+			local p=Instance.new("WedgePart"); p.Name=name; p.Size=Vector3.new(.018,height,spec[4])
+			p.CFrame=root.CFrame*CFrame.fromMatrix(spec[1],spec[2],up,spec[3]); p.Color=color; p.Material=Enum.Material.Metal
+			p.CanCollide=false; p.CanTouch=false; p.CanQuery=false; p.Massless=true; p.Anchored=preview==true
+			p.TopSurface=Enum.SurfaceType.Smooth; p.BottomSurface=Enum.SurfaceType.Smooth; p.Parent=root
+			if not preview then local w=Instance.new("WeldConstraint"); w.Part0=root; w.Part1=p; w.Parent=p end
+		end
+	end
+	local function spindle(name,length,radius,cf,color)
+		return piece(name,Vector3.new(length,radius*2,radius*2),cf*CFrame.Angles(0,0,math.pi/2),color,Enum.Material.Metal,Enum.PartType.Cylinder)
+	end
+	local function maceHead(center)
+		ball("MaceHead",Vector3.one*1.05,center,iron)
+		for _,y in {-.37,.37} do spindle("HeadBand",.10,.45,CFrame.new(center+Vector3.new(0,y,0)),bronze) end
+		for i=0,7 do
+			local angle=i/8*math.pi*2
+			local radial=Vector3.new(math.cos(angle),0,math.sin(angle))
+			local tangent=Vector3.new(-math.sin(angle),0,math.cos(angle))*.08
+			local base=center+radial*.38
+			local tip=center+radial*.82
+			for _,side in {-1,1} do
+				triangle("MaceFlange",base+Vector3.new(0,-.39,0)+tangent*side,base+Vector3.new(0,.39,0)+tangent*side,tip+tangent*side,if i%2==0 then bronze else steel)
+			end
+		end
+	end
 	if id=="Sword" then
 		if attachImported(root,id,preview) then return end
-		piece("LeatherGrip",Vector3.new(.25,.85,.28),CFrame.new(0,-.48,0),leather,Enum.Material.Fabric)
-		for i=0,5 do piece("GripWrap",Vector3.new(.28,.055,.3),CFrame.new(0,-.82+i*.12,0),wood) end
-		ball("Pommel",Vector3.new(.45,.3,.38),Vector3.new(0,-1,0),bronze)
-		piece("Guard",Vector3.new(.85,.22,.42),CFrame.new(0,-.02,0),bronze)
-		piece("Blade",Vector3.new(.48,2.3,.12),CFrame.new(0,1.22,0),steel)
-		piece("BladeRidge",Vector3.new(.085,2.22,.15),CFrame.new(0,1.22,0),Color3.fromRGB(225,229,225))
-		-- Two bevelled edges taper to a pointed tip.
-		for _,side in {-1,1} do
-			local tip=piece("BladeTip",Vector3.new(.12,.65,.24),CFrame.new(side*.12,2.69,0)*CFrame.Angles(0,-side*math.pi/2,0),steel)
-			local mesh=Instance.new("SpecialMesh"); mesh.MeshType=Enum.MeshType.Wedge; mesh.Parent=tip
-			bar("BladeEdge",Vector3.new(side*.24,.1,0),Vector3.new(side*.24,2.36,0),.045,Color3.fromRGB(229,234,229))
+		spindle("LeatherGrip",.92,.155,CFrame.new(0,-.55,0),leather)
+		for i=0,7 do
+			spindle("GripWrap",.035,.172,CFrame.new(0,-.94+i*.115,0)*CFrame.Angles(.07,0,.10),wood)
 		end
+		ball("Pommel",Vector3.new(.5,.32,.4),Vector3.new(0,-1.13,0),bronze)
+		disk("PommelSeal",.12,.035,CFrame.new(0,-1.13,-.2),edge)
+		ball("Guard",Vector3.new(1.05,.28,.48),Vector3.new(0,-.06,0),bronze)
+		for _,side in {-1,1} do ball("GuardFinial",Vector3.one*.23,Vector3.new(side*.47,-.05,0),edge) end
+		spindle("BladeCollar",.20,.21,CFrame.new(0,.10,0),bronze)
+		-- A leaf-shaped, diamond-section blade with real bevel planes, not a rectangular bar.
+		local sections={{.18,.23,.075},{.70,.31,.095},{2.15,.235,.07},{2.92,0,0}}
+		local function cross(section)
+			return {Vector3.new(-section[2],section[1],0),Vector3.new(0,section[1],-section[3]),Vector3.new(section[2],section[1],0),Vector3.new(0,section[1],section[3])}
+		end
+		for i=1,#sections-1 do
+			local lower,upper=cross(sections[i]),cross(sections[i+1])
+			for j=1,4 do
+				local k=j%4+1
+				local color=if j%2==0 then steel else Color3.fromRGB(224,231,229)
+				triangle("BladeBevel",lower[j],lower[k],upper[k],color)
+				triangle("BladeBevel",lower[j],upper[k],upper[j],color)
+			end
+		end
+		-- Invisible trail attachment support follows the authored blade silhouette.
+		local blade=piece("Blade",Vector3.new(.05,2.4,.05),CFrame.new(0,1.48,0),steel); blade.Transparency=1
+		for _,side in {-1,1} do bar("BladeInlay",Vector3.new(side*.06,.25,-.09),Vector3.new(side*.035,.78,-.103),.024,bronze) end
 	elseif id=="Shield" then
 		piece("Scutum",Vector3.new(1.9,2.75,.21),CFrame.identity,Color3.fromRGB(109,36,31),Enum.Material.Wood)
 		for _,side in {-1,1} do
@@ -110,21 +158,22 @@ function Models.attach(root,id,preview)
 		ball("ShieldBoss",Vector3.new(.64,.64,.34),Vector3.new(0,0,-.27),iron)
 	elseif id=="Mace" then
 		if attachImported(root,id,preview) then return end
-		piece("MaceGrip",Vector3.new(.30,1.55,.30),CFrame.new(0,-.35,0),leather)
-		for _,y in {-.98,.38} do ball("GripCap",Vector3.new(.40,.20,.40),Vector3.new(0,y,0),bronze) end
+		spindle("MaceGrip",1.6,.17,CFrame.new(0,-.35,0),leather)
+		for i=0,8 do spindle("GripWrap",.035,.19,CFrame.new(0,-1.03+i*.16),wood) end
+		for _,y in {-1.15,.47} do
+			spindle("GripCap",.13,.24,CFrame.new(0,y,0),bronze)
+			ball("CapRivet",Vector3.one*.16,Vector3.new(0,y,-.23),edge)
+		end
 		for i=1,5 do
-			-- Four bars per alternating chain link, with actual gaps.
-			local cf=CFrame.new(0,.45+i*.20,0)*CFrame.Angles(0,if i%2==0 then math.pi/2 else 0,0)
-			for _,s in {-1,1} do
-				piece("ChainLink",Vector3.new(.06,.25,.06),cf*CFrame.new(s*.10,0,0),iron)
-				piece("ChainLink",Vector3.new(.22,.06,.06),cf*CFrame.new(0,s*.125,0),iron)
+			local cf=CFrame.new(0,.5+i*.23,0)*CFrame.Angles(0,if i%2==0 then math.pi/2 else 0,0)
+			for j=0,7 do
+				local a=j/8*math.pi*2; local b=(j+1)/8*math.pi*2
+				bar("ChainLink",cf:PointToWorldSpace(Vector3.new(math.cos(a)*.115,math.sin(a)*.17,0)),cf:PointToWorldSpace(Vector3.new(math.cos(b)*.115,math.sin(b)*.17,0)),.055,steel)
 			end
 		end
-		ball("MaceHead",Vector3.one*1.05,Vector3.new(0,1.97,0),iron)
-		for i=0,5 do
-			local a=i/6*math.pi*2
-			piece("MaceFlange",Vector3.new(.18,.75,.48),CFrame.new(math.cos(a)*.47,1.97,math.sin(a)*.47)*CFrame.Angles(0,-a,0),bronze)
-		end
+		maceHead(Vector3.new(0,2.20,0))
+	elseif id=="MaceHead" then
+		maceHead(Vector3.zero)
 	elseif id=="Bow" then
 		local last=nil
 		for i=0,12 do

@@ -12,7 +12,7 @@ function Arena.new(fx)
 	local self=setmetatable({fx=fx,slabs={},byPart={},age=0,rng=Random.new(),dummies={},adrenalineAt={}},Arena)
 	local world=Instance.new("Model"); world.Name="UnstableArenaWorld"; world.Parent=workspace; self.world=world
 	local lobby=Coliseum.build(world); self.spawn=lobby.spawn; self.pads=lobby.pads; self.header=lobby.header; self.headerHint=lobby.headerHint
-	self:MakeDummy(CFrame.new(30,134,-154)); return self
+	self:MakeDummy(lobby.practice); return self
 end
 function Arena:MakeDummy(home)
 	local rig=Instance.new("Model"); rig.Name="PracticeDummy"; rig.Parent=self.world
@@ -71,6 +71,7 @@ end
 function Arena:Build(map,seed)
 	if self.model then self.model:Destroy() end
 	table.clear(self.slabs); table.clear(self.byPart); table.clear(self.adrenalineAt); self.age=0; self.pitch=0; self.roll=0; self.map=map
+	self.impactPitch=0; self.impactRoll=0; self.shake=0; self.impactUntil=0
 	local model=Instance.new("Model"); model.Name="RoundArena"; model.Parent=self.world; self.model=model
 	local core=U.part(model,"Core",Vector3.new(3,2,3),CFrame.new(Config.Arena.Center))
 	core.Transparency=1; core.CanCollide=false; core.CanQuery=false; core.RootPriority=127; self.core=core
@@ -85,13 +86,13 @@ function Arena:Build(map,seed)
 		local slab=Instance.new("Model"); slab.Name="Stone_"..i; slab.Parent=model
 		local y=Config.Arena.Center.Y+self.rng:NextNumber(-.1,.1)
 		local cf=CFrame.new(cell.center.x,y,cell.center.z)
-		local pivot=U.part(slab,"SlabRoot",Vector3.new(3,4.6,3),cf); pivot.Transparency=1
+		local pivot=U.part(slab,"SlabRoot",Vector3.new(3,Config.Arena.Thickness,3),cf); pivot.Transparency=1
 		pivot.CanCollide=false; pivot.CanQuery=false; pivot.Massless=true; slab.PrimaryPart=pivot
 		local color=map.Color:Lerp(Color3.fromRGB(190,175,144),self.rng:NextNumber(0,.28))
 		local record={part=pivot,model=slab,cell=cell,weld=U.weld(core,pivot),stress=0,broken=false,
 			durability=self.rng:NextNumber(Config.Slabs.DurabilityMin,Config.Slabs.DurabilityMax),extraWeight=0,weightUntil=0,
 			cracks={},faces={},lastStage=-1,color=color,neighbors={}}
-		for _,p in G.polygon(slab,cell.polygon,y,4.6,color,map.Material) do
+		for _,p in G.polygon(slab,cell.polygon,y,Config.Arena.Thickness,color,map.Material) do
 			p.CustomPhysicalProperties=PhysicalProperties.new(1.2,.32,.03)
 			U.weld(pivot,p); self.byPart[p]=record; table.insert(record.faces,p)
 		end
@@ -108,14 +109,14 @@ function Arena:Build(map,seed)
 			local distance=if length>.001 then math.abs(dx*(b.z-a.z)-dz*(b.x-a.x))/length else 0
 			if t>0 and t<1 and distance<.42 then table.remove(lower,j) end
 		end
-		for _,p in G.polygon(slab,lower,y-3.15,1.9,color:Lerp(Color3.fromRGB(81,70,62),.45),Enum.Material.Rock) do
+		for _,p in G.polygon(slab,lower,y-Config.Arena.Thickness/2-.25,.55,color:Lerp(Color3.fromRGB(81,70,62),.45),Enum.Material.Rock) do
 			p.Massless=true; p.CanCollide=false; p.CanQuery=false; U.weld(pivot,p)
 		end
 		-- Branching stress fractures, with no repeated parallel grid pattern.
 		for branch=1,3 do
 			local vertex=cell.polygon[((i+branch*2)%#cell.polygon)+1]
-			local from=Vector3.new(cell.center.x,y+2.315,cell.center.z)
-			local to=Vector3.new(vertex.x,y+2.315,vertex.z)
+			local from=Vector3.new(cell.center.x,y+Config.Arena.Thickness/2+.015,cell.center.z)
+			local to=Vector3.new(vertex.x,y+Config.Arena.Thickness/2+.015,vertex.z)
 			for step=1,3 do
 				local target=from:Lerp(to,1/(4-step))
 				if step<3 then target+=Vector3.new(self.rng:NextNumber(-.55,.55),0,self.rng:NextNumber(-.55,.55)) end
@@ -193,6 +194,7 @@ function Arena:ApplySlopePhysics(active,dt)
 end
 function Arena:Break(s)
 	if s.broken then return end
+	self.shake=math.min(2,(self.shake or 0)+.55)
 	s.broken=true; s.model:SetAttribute("Broken",true)
 	if s.pickup then s.pickup:Destroy(); s.pickup=nil end
 	s.weld:Destroy(); s.part:SetNetworkOwner(nil)
@@ -200,6 +202,12 @@ function Arena:Break(s)
 	s.part.AssemblyAngularVelocity=Vector3.new(self.rng:NextNumber(-1,1),0,self.rng:NextNumber(-1,1))
 	Debris:AddItem(s.model,5); self.fx:FireAllClients("Break",s.part.Position)
 	for _,neighbor in s.neighbors do if not neighbor.broken then neighbor.stress+=2.3 end end
+end
+function Arena:MeteorImpulse(position)
+	self.impactUntil=self.age+.40; self.shake=2
+	local offset=position-Config.Arena.Center
+	local pitch,roll=Rules.impactKick(offset.X,offset.Z,Config.Arena.Radius,Config.Hazards.ImpactTilt)
+	self.impactPitch,self.impactRoll=Rules.limitTilt((self.impactPitch or 0)+pitch,(self.impactRoll or 0)+roll,Config.Hazards.ImpactTiltCap)
 end
 function Arena:Step(dt,active)
 	self.age+=dt; local tx,tz=0,0; local weights={}
@@ -211,12 +219,6 @@ function Arena:Step(dt,active)
 				local weight=if (actor:GetAttribute("AnchorUntil") or 0)>workspace:GetServerTimeNow() then 1.5 else 1
 				weights[slab]=(weights[slab] or 0)+weight
 				local offset=root.Position-Config.Arena.Center; tx+=offset.X*weight; tz+=offset.Z*weight
-				local radial=Vector3.new(offset.X,0,offset.Z).Magnitude
-				if radial>Config.Arena.Radius*.84 and os.clock()>(self.adrenalineAt[actor] or 0) then
-					self.adrenalineAt[actor]=os.clock()+5
-					local current=actor:GetAttribute("Adrenaline") or 0
-					actor:SetAttribute("Adrenaline",math.clamp(current+Config.Adrenaline.NearEdgeGain,0,Config.Adrenaline.Max))
-				end
 			end
 		end
 	end
@@ -242,14 +244,22 @@ function Arena:Step(dt,active)
 	)
 	self.pitch=Rules.approach(self.pitch or 0,pitch,1.3,dt)
 	self.roll=Rules.approach(self.roll or 0,roll,1.3,dt)
-	self.orientation.CFrame=CFrame.Angles(math.rad(self.pitch),0,math.rad(self.roll))
+	local tremor=Config.Arena.ShakeDegrees*(.45+intensity*.55)+(self.shake or 0)
+	local shakePitch=math.sin(self.age*17)*tremor
+	local shakeRoll=math.sin(self.age*13.7+.7)*tremor*.75
+	self.shake=Rules.approach(self.shake or 0,0,3,dt)
+	self.orientation.MaxAngularVelocity=if self.age<(self.impactUntil or 0) then 1.8 else Config.Arena.AngularSpeed
+	self.orientation.Responsiveness=if self.age<(self.impactUntil or 0) then 32 else Config.Arena.Response
+	local kickedPitch,kickedRoll=Rules.limitTilt(self.pitch+(self.impactPitch or 0)+shakePitch,self.roll+(self.impactRoll or 0)+shakeRoll,Config.Arena.MaxTilt)
+	-- An immediate bounded target change creates a jolt; the normal balance then recovers.
+	self.orientation.CFrame=CFrame.Angles(math.rad(kickedPitch),0,math.rad(kickedRoll))
+	self.impactPitch=Rules.approach(self.impactPitch or 0,0,Config.Hazards.ImpactTiltDecay,dt)
+	self.impactRoll=Rules.approach(self.impactRoll or 0,0,Config.Hazards.ImpactTiltDecay,dt)
 	local tilt=math.sqrt(pitch*pitch+roll*roll)/Config.Arena.MaxTilt
 	self:ApplySlopePhysics(active,dt)
 	for _,s in self.slabs do
 		if s.broken then continue end
-		if self.age>Config.Slabs.Grace then
-			s.stress+=Rules.stressRate(weights[s] or 0,tilt,self.age,self.map.Duration)*dt*Config.Slabs.StressMultiplier
-		end
+		if self.age>Config.Slabs.Grace then s.stress+=Rules.stressRate(weights[s] or 0,tilt,self.age,self.map.Duration)*Config.Slabs.StressMultiplier*dt end
 		local fraction=s.stress/s.durability
 		local stage=if fraction>=.85 then 3 elseif fraction>=.55 then 2 elseif fraction>=.3 then 1 else 0
 		if stage~=s.lastStage then
@@ -263,38 +273,6 @@ function Arena:Step(dt,active)
 		if fraction>=1 and s.warningAt and self.age-s.warningAt>=Config.Slabs.WarningTime then self:Break(s) end
 	end
 end
-function Arena:ImpactTilt(position,strength)
-	if not self.core or not self.orientation or not self.core.Parent then return end
-	local offset=position-Config.Arena.Center
-	local flat=Vector3.new(offset.X,0,offset.Z)
-	local direction
-	if flat.Magnitude<1 then
-		local angle=self.rng:NextNumber(0,math.pi*2)
-		direction=Vector3.new(math.sin(angle),0,math.cos(angle))
-	else
-		direction=flat.Unit
-	end
-	local radial=math.clamp(flat.Magnitude/Config.Arena.Radius,.45,1)
-	local kick=(strength or Config.Hazards.MeteorImpactTilt)*radial
-	local pitch=(self.pitch or 0)+direction.Z*kick
-	local roll=(self.roll or 0)-direction.X*kick
-	local clamp=math.min(Config.Arena.MaxTilt,Config.Hazards.MeteorImpactTiltClamp)
-	self.pitch,self.roll=Rules.limitTilt(pitch,roll,clamp)
-	self.orientation.CFrame=CFrame.Angles(math.rad(self.pitch),0,math.rad(self.roll))
-
-	-- Briefly let AlignOrientation react much faster than normal balance motion.
-	self.impactToken=(self.impactToken or 0)+1
-	local token=self.impactToken
-	self.orientation.MaxAngularVelocity=3.2
-	self.orientation.Responsiveness=42
-	task.delay(.48,function()
-		if self.impactToken~=token or not self.orientation or not self.orientation.Parent then return end
-		self.orientation.MaxAngularVelocity=Config.Arena.AngularSpeed
-		self.orientation.Responsiveness=Config.Arena.Response
-	end)
-	self.fx:FireAllClients("PlateImpact",position,Vector2.new(self.pitch,self.roll))
-end
-
 function Arena:AddHazardWeight(position,amount,duration)
 	local slab=self:GroundAt(position+Vector3.new(0,14,0),30)
 	if slab then

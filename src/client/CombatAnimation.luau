@@ -4,6 +4,7 @@
 local Players=game:GetService("Players")
 local RunService=game:GetService("RunService")
 local CollectionService=game:GetService("CollectionService")
+local WeaponPoses=require(script.Parent.WeaponPoses)
 local Animation={}
 local ID=CFrame.identity
 local function pose(x,y,z) return CFrame.Angles(math.rad(x),math.rad(y or 0),math.rad(z or 0)) end
@@ -29,6 +30,7 @@ function Animation.start()
 				elseif name:find("lefthip") then "leftHip"
 				elseif name:find("rightknee") then "rightKnee"
 				elseif name:find("leftknee") then "leftKnee"
+				elseif name=="weapongrip" then "grip"
 				elseif name=="rootjoint" or name=="root" then "body" else nil
 			if role then data.joints[d]={role=role,base=ID,applied=false} end
 		end
@@ -67,16 +69,13 @@ function Animation.start()
 			local root=character:FindFirstChild("HumanoidRootPart")
 			local hum=character:FindFirstChildOfClass("Humanoid")
 			if not root or not hum or hum.Health<=0 or hum.PlatformStand then continue end
-			if camera and (root.Position-camera.CFrame.Position).Magnitude>250 then continue end
+			if camera and (root.Position-camera.CFrame.Position).Magnitude>500 then continue end
 			local actor=data.actor
 			local velocity=root.AssemblyLinearVelocity
 			local speed=Vector3.new(velocity.X,0,velocity.Z).Magnitude
 			data.phase+=math.min(speed,30)*dt*.52
-			local offsets={}; local weights={}; local absolute={}
-			local function set(role,cf,w,hard)
-				offsets[role]=cf; weights[role]=w or 1
-				if hard then absolute[role]=true end
-			end
+			local offsets={}; local weights={}; local overrides={}
+			local function set(role,cf,w,absolute) offsets[role]=cf; weights[role]=w or 1; overrides[role]=absolute==true end
 			if actor:GetAttribute("Bot") then
 				local stride=math.sin(data.phase)*math.clamp(speed/18,0,1)*.58
 				set("rightHip",CFrame.Angles(stride,0,0)); set("leftHip",CFrame.Angles(-stride,0,0))
@@ -84,12 +83,8 @@ function Animation.start()
 				set("body",CFrame.new(0,math.abs(math.sin(data.phase))*.055,0))
 			end
 			local item=actor:GetAttribute("Item")
-			if item=="Sword" then
-				set("right",pose(38,-18,28),.88); set("rightElbow",pose(48),.9)
-				set("left",pose(18,10,-18),.55); set("body",pose(-4,-8,0),.45)
-			elseif item=="Mace" or item=="Ram" then
-				set("right",pose(58,-24,24),.9); set("rightElbow",pose(62),.9)
-				set("left",pose(24,12,-20),.55); set("body",pose(4,10,0),.5)
+			if item=="Sword" or item=="Mace" or item=="Ram" then
+				set("right",pose(25,-12,16),.85,true); set("rightElbow",pose(35),.85,true)
 			elseif item=="Bow" then
 				set("left",pose(35,0,-12),.7); set("right",pose(30,0,12),.7)
 			end
@@ -99,15 +94,10 @@ function Animation.start()
 			local t,w=envelope(now,actor:GetAttribute("SwingUntil") or 0,.40)
 			if w>0 then
 				local extend=math.clamp((t-.18)/.22,0,1)
-				-- Hard-lock both arms and the braced torso/hips over locomotion.
-				-- This is applied after Roblox's Animator, so walk cycles cannot steal one shoulder.
-				set("right",pose(32+58*extend,0,9),w,true)
-				set("left",pose(32+58*extend,0,-9),w,true)
-				set("rightElbow",pose(68*(1-extend)),w,true)
-				set("leftElbow",pose(68*(1-extend)),w,true)
-				set("body",CFrame.new(0,0,-.08*extend)*pose(-10*extend,0,0),w,true)
-				set("rightHip",pose(-12,0,5),w,true)
-				set("leftHip",pose(-12,0,-5),w,true)
+				set("right",pose(30+55*extend,0,8),w,true); set("left",pose(30+55*extend,0,-8),w,true)
+				set("rightElbow",pose(60*(1-extend)),w,true); set("leftElbow",pose(60*(1-extend)),w,true)
+				set("body",pose(-8*extend),w,true)
+				set("rightHip",pose(-12,0,5),w,true); set("leftHip",pose(-12,0,-5),w,true)
 			end
 			t,w=envelope(now,actor:GetAttribute("GrabUntil") or 0,.52)
 			if w>0 then
@@ -119,39 +109,30 @@ function Animation.start()
 			t,w=envelope(now,actor:GetAttribute("ItemActionUntil") or 0,actor:GetAttribute("ItemActionDuration") or .55)
 			if w>0 then
 				local kind=actor:GetAttribute("ItemActionKind")
-				if kind=="Sword" then
-					local sweep=math.clamp((t-.20)/.30,0,1)
-					local alternate=if (actor:GetAttribute("AttackIndex") or 0)%2==0 then 1 else -1
-					set("right",pose(92,(-72+142*sweep)*alternate,46-70*sweep),w,true)
-					set("rightElbow",pose(38*(1-sweep)),w,true)
-					set("left",pose(26,-12*alternate,-26),w,true)
-					set("body",pose(-8,(-24+52*sweep)*alternate,0),w,true)
-					set("rightHip",pose(-8,8*alternate,4),w,true)
-					set("leftHip",pose(-16,-5*alternate,-4),w,true)
+				if kind=="Sword" or kind=="Mace" then
+					for role,cf in WeaponPoses.sample(kind,t,(actor:GetAttribute("AttackIndex") or 0)%2==0) do
+						set(role,cf,w,true)
+					end
 				elseif kind=="Bow" then
 					set("left",pose(90,-65,-6),w); set("right",pose(70,65,10),w)
 					set("rightElbow",pose(105*(1-math.clamp((t-.55)*4,0,1))),w)
 					set("body",pose(0,-30,0),w)
-				elseif kind=="Mace" or kind=="Ram" then
-					local strike=math.clamp((t-.42)/.30,0,1)
-					set("right",pose(162-98*strike,-28,30),w,true)
-					set("rightElbow",pose(82-54*strike),w,true)
-					set("left",pose(34,18,-28),w,true)
-					set("body",pose(14-30*strike,26-48*strike,0),w,true)
-					set("rightHip",pose(-18,10,5),w,true)
-					set("leftHip",pose(-10,-6,-5),w,true)
+				elseif kind=="Ram" then
+					local strike=math.clamp((t-.45)/.25,0,1)
+					set("right",pose(150-85*strike,-20,22),w); set("body",pose(10-22*strike,20-35*strike,0),w)
 				elseif kind=="Shield" then set("left",pose(90,-15,-18),w)
 				else
 					set("right",pose(55,0,15),w); set("body",pose(-12),w)
 				end
 			end
+			local fighting=math.max(actor:GetAttribute("SwingUntil") or 0,actor:GetAttribute("ItemActionUntil") or 0,actor:GetAttribute("GrabUntil") or 0)>now
 			t,w=envelope(now,actor:GetAttribute("SlidingUntil") or 0,.72)
-			if w>0 then
+			if w>0 and not fighting then
 				set("body",CFrame.new(0,-.85,0)*pose(30),w)
 				set("rightHip",pose(-55,0,8),w); set("leftHip",pose(-25,0,-8),w)
 				set("rightKnee",pose(-70),w); set("leftKnee",pose(-105),w)
 				set("right",pose(-18,0,25),w); set("left",pose(-18,0,-25),w)
-			elseif (actor:GetAttribute("DashUntil") or 0)>now then set("body",pose(-18),.8) end
+			elseif not fighting and (actor:GetAttribute("DashUntil") or 0)>now then set("body",pose(-18),.8) end
 			for joint,info in data.joints do
 				local offset=offsets[info.role]
 				if offset and joint.Parent then
@@ -160,14 +141,11 @@ function Animation.start()
 					local basis=ID
 					if joint:IsA("Motor6D") then basis=joint.C1.Rotation
 					elseif joint.Attachment1 then basis=joint.Attachment1.CFrame.Rotation end
+					local target=basis:Inverse()*offset*basis
 					local weight=weights[info.role] or 1
-					if absolute[info.role] then
-						local target=basis:Inverse()*offset*basis
-						joint.Transform=info.base:Lerp(target,weight)
-					else
-						local layer=ID:Lerp(offset,weight)
-						joint.Transform=info.base*basis:Inverse()*layer*basis
-					end
+					-- Combat owns its arm joints; adding to a walk swing cancels one arm.
+					if overrides[info.role] then joint.Transform=info.base:Lerp(target,weight)
+					else joint.Transform=info.base*ID:Lerp(target,weight) end
 					info.applied=true
 				end
 			end

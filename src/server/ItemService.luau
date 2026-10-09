@@ -5,6 +5,7 @@ local Config=require(game:GetService("ReplicatedStorage").Shared.Config)
 local U=require(script.Parent.Util)
 local Visuals=require(game:GetService("ReplicatedStorage").Shared.ItemModels)
 local Rules=require(game:GetService("ReplicatedStorage").Shared.Rules)
+local Stamina=require(script.Parent.Stamina)
 local Items={}; Items.__index=Items
 
 local SLOT_COUNT=3
@@ -14,7 +15,7 @@ local function usesAttr(i) return "Inventory"..i.."Uses" end
 function Items.new(round,arena,combat,fx)
 	return setmetatable({
 		round=round,arena=arena,combat=combat,fx=fx,
-		arrows={},maces={},nextSpawn=0,nextProjectile=0,spawnCursor=0,
+		arrows={},nextSpawn=0,
 	},Items)
 end
 
@@ -32,7 +33,10 @@ function Items:UpdateHeld(p)
 	local holder=U.part(char,"HeldArenaItem",Vector3.new(.18,.18,.18),hand.CFrame*CFrame.new(0,-hand.Size.Y*.42,-.15)*CFrame.Angles(if id=="Shield" then 0 else math.pi/2,0,0))
 	holder.Transparency=1; holder.CanCollide=false; holder.CanQuery=false; holder.CanTouch=false; holder.Massless=true
 	holder:SetAttribute("ItemId",id)
-	U.weld(hand,holder); Visuals.attach(holder,id)
+	holder.Anchored=false
+	local grip=Instance.new("Motor6D"); grip.Name="WeaponGrip"; grip.Part0=hand; grip.Part1=holder
+	grip.C0=hand.CFrame:ToObjectSpace(holder.CFrame); grip.Parent=holder
+	Visuals.attach(holder,id)
 	if id=="Sword" then
 		local blade=holder:FindFirstChild("Blade",true) or holder:FindFirstChildWhichIsA("MeshPart",true)
 		if blade then
@@ -91,14 +95,15 @@ function Items:Clear(p)
 end
 
 function Items:Reset()
-	self.arrows={}; self.maces={}; self.nextSpawn=0; self.spawnCursor=0
+	self.arrows={}; self.nextSpawn=0
 	for _,p in Players:GetPlayers() do self:Clear(p) end
 end
 
 function Items:Pickup(p,slab,pickup,id)
 	if not self.round:IsActive(p) or slab.broken or slab.pickup~=pickup then return end
-	local slot=self:FirstEmpty(p)
-	if not slot then U.notify(self.fx,p,"Toast","INVENTORY FULL · use or switch an item"); return end
+	if (p:GetAttribute("ItemActionUntil") or 0)>workspace:GetServerTimeNow() then return end
+	local slot=self:FirstEmpty(p) or p:GetAttribute("ActiveSlot") or 1
+	if not Rules.validSlot(slot) then return end
 	local root=U.root(p)
 	if not root or not pickup.Parent or (root.Position-pickup.Position).Magnitude>11 then return end
 	local ray=RaycastParams.new(); ray.FilterType=Enum.RaycastFilterType.Exclude
@@ -115,57 +120,42 @@ function Items:Pickup(p,slab,pickup,id)
 end
 
 function Items:Spawn()
-	local choices={}; local occupied={}; local count=0
-	local spawnConfig=Config.WeaponSpawns
+	local choices={}; local occupied={}; local sectors=table.create(8,0)
 	for _,slab in self.arena.slabs do
-		if slab.pickup and slab.pickup.Parent then
-			count+=1; table.insert(occupied,slab.pickup.Position)
-		end
-		if not slab.broken and not slab.pickup and slab.stress<slab.durability*.67 then
-			local offset=slab.part.Position-Config.Arena.Center
-			local radial=Vector3.new(offset.X,0,offset.Z).Magnitude
-			if radial>=spawnConfig.MinRadius and radial<=spawnConfig.MaxRadius then
-				table.insert(choices,slab)
-			end
+		if slab.pickup and not slab.pickup.Parent then slab.pickup=nil end
+		local x,z=slab.cell.center.x,slab.cell.center.z
+		local sector=math.floor((math.atan2(z,x)+math.pi)/(math.pi*2)*8)%8+1
+		if slab.pickup then table.insert(occupied,slab); sectors[sector]+=1 end
+		if not slab.broken and not slab.pickup and slab.stress<slab.durability*.67
+			and Rules.inPickupBand(x,z,Config.Arena.Radius,Config.Pickups.InnerRadius,Config.Pickups.OuterRadius) then
+			table.insert(choices,{slab=slab,sector=sector})
 		end
 	end
-	if count>=8 or #choices==0 then return end
-
-	-- Cycle through evenly spaced annulus targets instead of picking a fully random slab.
-	-- This keeps pickups central enough to contest while reserving a no-spawn hole at the exact center.
-	local slots=spawnConfig.SectorCount*spawnConfig.RingCount
-	self.spawnCursor=(self.spawnCursor%slots)+1
-	local cursor=self.spawnCursor-1
-	local sector=cursor%spawnConfig.SectorCount
-	local ring=math.floor(cursor/spawnConfig.SectorCount)%spawnConfig.RingCount
-	local angle=(sector+(ring%2)*.5)/spawnConfig.SectorCount*math.pi*2
-	local ringAlpha=(ring+.5)/spawnConfig.RingCount
-	local radius=spawnConfig.MinRadius+(spawnConfig.MaxRadius-spawnConfig.MinRadius)*ringAlpha
-	local target=Config.Arena.Center+Vector3.new(math.sin(angle)*radius,0,math.cos(angle)*radius)
-
-	local slab=nil; local best=math.huge
+	if #occupied>=Config.Pickups.Maximum then return end
+	local slab=nil; local best=-math.huge
 	for _,candidate in choices do
-		local score=(candidate.part.Position-target).Magnitude
-		for _,position in occupied do
-			local separation=(candidate.part.Position-position).Magnitude
-			if separation<spawnConfig.MinSeparation then
-				score+=(spawnConfig.MinSeparation-separation)*6+45
-			end
+		local nearest=math.huge
+		for _,other in occupied do
+			local dx=candidate.slab.cell.center.x-other.cell.center.x
+			local dz=candidate.slab.cell.center.z-other.cell.center.z
+			nearest=math.min(nearest,math.sqrt(dx*dx+dz*dz))
 		end
-		if score<best then best=score; slab=candidate end
+		if nearest<Config.Pickups.MinimumSpacing then continue end
+		-- Fill empty angular sectors first, then maximize separation. No clumped rim spawns.
+		local score=-sectors[candidate.sector]*1000+math.min(nearest,100)+math.random()
+		if score>best then slab=candidate.slab; best=score end
 	end
 	if not slab then return end
-
 	local ids={"Sword","Sword","Mace","Shield","Shield","Anchor","Ram","Brace","Weight","Bow","Bow"}
 	local id=ids[math.random(#ids)]; local def=Config.Items[id]
-	local pickup=U.part(slab.model,"Pickup_"..id,Vector3.new(1.6,1.2,1.6),slab.part.CFrame*CFrame.new(0,3.8,0),def.Color,Enum.Material.Metal)
+	local pickup=U.part(slab.model,"Pickup_"..id,Vector3.new(1.6,1.2,1.6),slab.part.CFrame*CFrame.new(0,Config.Arena.Thickness/2+1.5,0),def.Color,Enum.Material.Metal)
 	pickup.Transparency=1; Visuals.attach(pickup,id)
 	pickup:SetAttribute("ItemId",id)
 	pickup.CanCollide=false; pickup.CanQuery=false; pickup.Massless=true
 	U.weld(slab.part,pickup)
 	local pickupLabel=U.label(pickup,def.Name,Color3.fromRGB(239,221,185)); pickupLabel.Parent.MaxDistance=24
 	local prompt=Instance.new("ProximityPrompt")
-	prompt.ActionText="Take"; prompt.ObjectText=def.Name; prompt.HoldDuration=.12
+	prompt.ActionText="Take / swap"; prompt.ObjectText=def.Name; prompt.HoldDuration=.12
 	prompt.KeyboardKeyCode=Enum.KeyCode.R; prompt.GamepadKeyCode=Enum.KeyCode.ButtonY
 	prompt.MaxActivationDistance=9; prompt.RequiresLineOfSight=true; prompt.Parent=pickup
 	slab.pickup=pickup
@@ -173,6 +163,8 @@ function Items:Spawn()
 end
 
 function Items:Consume(p,amount)
+	local def=Config.Items[p:GetAttribute("Item")]
+	if def and def.Permanent then return end
 	local slot=math.clamp(tonumber(p:GetAttribute("ActiveSlot")) or 1,1,SLOT_COUNT)
 	local left=math.max(0,(p:GetAttribute(usesAttr(slot)) or 1)-(amount or 1))
 	p:SetAttribute(usesAttr(slot),left)
@@ -196,52 +188,47 @@ function Items:Use(p,aim)
 	if not self.round:IsActive(p) then return end
 	local checkRoot,checkHum=U.root(p)
 	if not checkRoot or checkRoot.Anchored or checkHum.PlatformStand then return end
-	if (p:GetAttribute("ItemActionUntil") or 0)>workspace:GetServerTimeNow() then return end
+	if math.max(p:GetAttribute("ItemActionUntil") or 0,p:GetAttribute("SwingUntil") or 0,p:GetAttribute("GrabUntil") or 0)>workspace:GetServerTimeNow() then return end
 	self:SyncActive(p)
 	local id=p:GetAttribute("Item"); local def=Config.Items[id]
 	if not def then return end
-	local duration=if id=="Mace" then .9 elseif id=="Bow" then .65 else .55
+	local duration=if id=="Mace" then Config.Combat.MaceDuration elseif id=="Sword" then Config.Combat.SwordDuration elseif id=="Bow" then .65 else .55
 	if not self.combat:Ready(p,"Item",if id=="Sword" then .60 else .85) then return end
 	local root=U.root(p); if not root then return end
 	local now=workspace:GetServerTimeNow()
 
-	if id=="Mace" then
-		local target=self.combat:Target(p,Config.Combat.MaceLockRange,false)
-		if not target then U.notify(self.fx,p,"Toast","NO TARGET IN MACE RANGE"); return end
-		local targetRoot=U.root(target); if not targetRoot then return end
-		p:SetAttribute("ItemActionDuration",duration)
-		p:SetAttribute("ItemActionUntil",now+duration); p:SetAttribute("ItemActionKind",id)
-		self.fx:FireAllClients("MaceWarning",targetRoot.Position,Config.Combat.MaceWarning)
-		self.nextProjectile+=1
-		table.insert(self.maces,{
-			id=self.nextProjectile,p=p,target=target,pos=root.Position+root.CFrame.LookVector*2+Vector3.new(0,1.2,0),
-			vel=(targetRoot.Position-root.Position).Unit*Config.Combat.MaceSpeed,age=0,delay=Config.Combat.MaceWarning,visualAge=0,
-			params=(function() local params=RaycastParams.new(); params.FilterType=Enum.RaycastFilterType.Exclude; params.FilterDescendantsInstances={U.character(p)}; return params end)(),
-		})
-		self:Consume(p,1)
-		U.notify(self.fx,p,"Cooldown","UseItem",.72)
-		return
-	end
+	local cost=if id=="Sword" then Config.Stamina.SwordCost elseif id=="Mace" then Config.Stamina.MaceCost else 0
+	if cost>0 and not Stamina.spend(p,cost) then U.notify(self.fx,p,"Toast","RECOVER STAMINA"); return end
 
 	p:SetAttribute("ItemActionDuration",duration)
 	p:SetAttribute("ItemActionUntil",now+duration)
 	p:SetAttribute("ItemActionKind",id)
 	local consumed=true
-	if id=="Sword" then
+	if id=="Sword" or id=="Mace" then
 		p:SetAttribute("AttackIndex",(p:GetAttribute("AttackIndex") or 0)+1)
 		local roundId=self.round.roundId
-		task.delay(.16,function()
-			if self.round.roundId~=roundId or not self.round:IsActive(p) or not root.Parent then return end
-			local target=self.combat:Target(p,Config.Combat.SwordRange,false)
-			if target then
-			local other=U.root(target)
+		local hitTime=if id=="Sword" then Config.Combat.SwordHitTime else Config.Combat.MaceHitTime
+		-- Start the full animation before searching for victims; a miss is still a swing.
+		task.delay(hitTime,function()
+			local liveRoot,hum=U.root(p)
+			if self.round.roundId~=roundId or not self.round:IsActive(p) or liveRoot~=root or hum.PlatformStand then return end
+			local range=if id=="Sword" then Config.Combat.SwordRange else Config.Combat.MaceRange
+			local target=self.combat:Target(p,range,false)
+			local other=target and U.root(target)
 			if other then
 				local delta=other.Position-root.Position
 				local flat=Vector3.new(delta.X,0,delta.Z)
 				local direction=if flat.Magnitude>.01 then flat.Unit else root.CFrame.LookVector
-				self.combat:Knock(target,direction*Config.Combat.SwordPower+Vector3.new(0,9,0),p)
+				self.combat:Knock(target,direction*(if id=="Sword" then Config.Combat.SwordPower else Config.Combat.MacePower)+Vector3.new(0,if id=="Sword" then 9 else 12,0),p)
 			end
-		end
+			if id=="Mace" then
+				local slab,point=self.arena:GroundAt(root.Position+root.CFrame.LookVector*4.5+Vector3.new(0,2,0),12)
+				if slab then
+					slab.stress+=3.5
+					self.arena.shake=math.max(self.arena.shake or 0,.4)
+					self.fx:FireAllClients("MaceImpact",point)
+				end
+			end
 		end)
 	elseif id=="Shield" then
 		p:SetAttribute("ShieldUntil",now+8)
@@ -267,7 +254,7 @@ function Items:Use(p,aim)
 				U.notify(self.fx,p,"Toast","This slab already has a weight"); consumed=false
 			else
 				slab.extraWeight=1.55; slab.weightUntil=os.clock()+8
-				local weight=U.part(slab.model,"WeightBlock",Vector3.new(2,2,2),slab.part.CFrame*CFrame.new(2,3.3,2),def.Color,Enum.Material.Metal)
+				local weight=U.part(slab.model,"WeightBlock",Vector3.new(2,2,2),slab.part.CFrame*CFrame.new(2,Config.Arena.Thickness/2+1,2),def.Color,Enum.Material.Metal)
 				weight.Massless=true; weight.CanCollide=false; weight.CanQuery=false
 				U.weld(slab.part,weight); Debris:AddItem(weight,8)
 			end
@@ -283,14 +270,14 @@ function Items:Use(p,aim)
 	end
 	if not consumed then return end
 	self.fx:FireAllClients("Item",root.Position,def.Color)
-	U.notify(self.fx,p,"Cooldown","UseItem",.72)
+	U.notify(self.fx,p,"Cooldown","UseItem",duration)
 	self:Consume(p,1)
 end
 
 function Items:Step(dt)
 	if self.round.phase~="Live" then return end
 	if os.clock()>=self.nextSpawn then
-		self.nextSpawn=os.clock()+4.2; self:Spawn()
+		self.nextSpawn=os.clock()+Config.Pickups.Interval; self:Spawn()
 	end
 
 	for i=#self.arrows,1,-1 do
@@ -323,53 +310,5 @@ function Items:Step(dt)
 		if remove then table.remove(self.arrows,i) end
 	end
 
-	for i=#self.maces,1,-1 do
-		local mace=self.maces[i]
-		local remove=not self.round:IsActive(mace.p)
-		mace.age+=dt
-		local targetRoot=not remove and U.root(mace.target) or nil
-		if not targetRoot or not self.combat:Enemy(mace.p,mace.target) then remove=true end
-		if not remove and mace.age>=mace.delay then
-			local left=math.min(dt,.15)
-			while left>0 and not remove do
-				local step=math.min(left,1/40); left-=step
-				local desired=targetRoot.Position+Vector3.new(0,1,0)-mace.pos
-				if desired.Magnitude<.05 then remove=true; break end
-				if desired.Magnitude<3.1 and workspace:Raycast(mace.pos,desired,mace.params)==nil then
-					local attackerRoot=U.root(mace.p)
-					local direction=if attackerRoot then (targetRoot.Position-attackerRoot.Position) else desired
-					local flat=Vector3.new(direction.X,0,direction.Z)
-					self.combat:Knock(mace.target,(if flat.Magnitude>.01 then flat.Unit else Vector3.zAxis)*74+Vector3.new(0,12,0),mace.p)
-					self.fx:FireAllClients("MaceImpact",targetRoot.Position)
-					remove=true; break
-				end
-				local direction=mace.vel.Unit
-				local desiredDirection=desired.Unit
-				local angle=math.acos(math.clamp(direction:Dot(desiredDirection),-1,1))
-				local turn=math.min(angle,Config.Combat.MaceTurnRate*step)
-				local axis=direction:Cross(desiredDirection)
-				if axis.Magnitude>.001 then direction=CFrame.fromAxisAngle(axis.Unit,turn):VectorToWorldSpace(direction) end
-				mace.vel=direction*Config.Combat.MaceSpeed
-				local from=mace.pos
-				local hit=workspace:Raycast(from,mace.vel*step,mace.params)
-				mace.pos=if hit then hit.Position else from+mace.vel*step
-				mace.visualAge+=step
-				if hit then
-					if hit.Instance:IsDescendantOf(U.character(mace.target)) then
-						self.combat:Knock(mace.target,direction*74+Vector3.new(0,12,0),mace.p)
-					end
-					self.fx:FireAllClients("MaceImpact",mace.pos)
-					remove=true
-				end
-				if mace.visualAge>=.045 then
-					local source=U.root(mace.p)
-					self.fx:FireAllClients("Mace",from,{id=mace.id,position=mace.pos,source=if source then source.Position else from})
-					mace.visualAge=0
-				end
-				if mace.age>1.25 then remove=true end
-			end
-		elseif not remove and mace.age>1.25 then remove=true end
-		if remove then self.fx:FireAllClients("MaceEnd",mace.pos,mace.id); table.remove(self.maces,i) end
-	end
 end
 return Items

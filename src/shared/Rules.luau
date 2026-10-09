@@ -43,4 +43,14 @@ end
 function Rules.approach(current: number, target: number, response: number, dt: number): number
 	return current+(target-current)*(1-math.exp(-response*dt))
 end
+function Rules.impactKick(x:number,z:number,radius:number,strength:number): (number,number)
+	local distance=math.sqrt(x*x+z*z)
+	if distance<.01 then return strength*.35,0 end
+	local amount=strength*math.clamp(distance/(radius*.65),.35,1)
+	return z/distance*amount,-x/distance*amount
+end
+function Rules.inPickupBand(x:number,z:number,radius:number,inner:number,outer:number):boolean
+	local d=x*x+z*z
+	return d>=(radius*inner)^2 and d<=(radius*outer)^2
+end
 return table.freeze(Rules)

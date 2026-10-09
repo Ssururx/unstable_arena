@@ -74,4 +74,30 @@ for tick=1,1750 do
 end
 check(idleBreak>100 and idleBreak<175,"Final-minute pressure closes empty safe areas")
 check(occupiedStress>idleStress,"Remaining on one stone wears it faster")
+-- Impacts remain directional and bounded, including exact-center strikes.
+for angle=0,355,5 do
+ local a=math.rad(angle)
+ local p,r=Rules.impactKick(math.cos(a)*100,math.sin(a)*100,110,8)
+ check(math.abs(math.sqrt(p*p+r*r)-8)<1e-6,"Outer meteor reaches configured kick")
+ local cp,cr=Rules.limitTilt(25+p,25+r,26)
+ check(math.sqrt(cp*cp+cr*cr)<=26.000001,"Combined balance and impact remain capped")
+end
+local ip,ir=Rules.impactKick(0,0,110,8)
+check(ip==ip and ir==ir and ip>0,"Center strike is finite and perceptible")
+check(not Rules.inPickupBand(0,0,110,.32,.65),"Exact center has no pickup")
+check(Rules.inPickupBand(40,0,110,.32,.65),"Inner contested ring accepts pickup")
+check(not Rules.inPickupBand(85,0,110,.32,.65),"Outer rim has no pickup")
+local function decayAt(multiplier:number):number
+ local stress=0
+ for tick=1,1750 do
+  local age=tick/10
+  if age>10 then stress+=Rules.stressRate(1,.2,age,175)*.1*multiplier end
+  if stress>=52 then return age end
+ end
+ return 175
+end
+check(decayAt(2.5)<decayAt(1)*.6,"Occupied stone fails substantially sooner")
+local impact=8
+for _=1,180 do impact=Rules.approach(impact,0,1.5,1/60) end
+check(impact<.1,"Meteor tilt settles rather than accumulating forever")
 print("PASS: "..checks.." rule assertions")

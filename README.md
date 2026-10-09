@@ -2,7 +2,7 @@
 
 **Fight, dodge and survive on a tilting, fracturing stone platform inside a Roman-inspired coliseum.**
 
-Current version: **0.6.0-arena-polish**. This is a development build; Studio multiplayer and device playtesting remain necessary.
+Current version: **0.8.0-overlook-combat**. This is a development build; Studio multiplayer and device playtesting remain necessary.
 
 ## Load this update
 
@@ -15,7 +15,7 @@ Current version: **0.6.0-arena-polish**. This is a development build; Studio mul
 Output should contain:
 
 ```text
-[UnstableArena] 0.6.0-arena-polish ready
+[UnstableArena] 0.8.0-overlook-combat ready
 ```
 
 If Rojo says it cannot connect, the live server is stopped or the plugin is using a different port. Git Pull updates VS Code files; Rojo copies those files into Studio. Both steps are necessary. In the repository terminal, `rojo serve default.project.json` is an alternative to the VS Code Start button when the CLI is on PATH.
@@ -24,36 +24,37 @@ Geometry is generated during Play. Keep local edits if Git reports a conflict; d
 
 ## This update
 
-- Three small square inventory slots. Empty means completely blank; occupied slots show the actual weapon model, uses and selection border.
-- Exactly three voting boards and three pads, reused for map and mode selection. Spawn faces them.
-- Weapon-specific combat motions, visible on players and NPCs; animated slides and NPC walking.
-- More detailed gladius, shield, chain mace, bow and utility models, shared across ground pickups, hands and inventory.
-- Mace warning, visible tethered projectile, limited tracking and terrain collision.
-- Gradual platform balance with less early sensitivity; frame-rate-independent slope acceleration.
-- Sustained dash/slide momentum, touch/controller movement controls and clearer hit feedback.
-- Rounded, articulated lion models and NPC hazard avoidance.
-- Less redundant scenery and underside geometry.
+- Meteors are 8.4 studs across (previous original model: 3.8) and fall 120 studs in 0.28 seconds after a 0.75-second telegraph. The warning follows the moving slab; impact detaches that exact slab.
+- Impact tilt adds up to 8 degrees, with accumulated impact capped at 10 and total tilt capped at 26. A short faster response settles back into balance. Small platform tremors intensify after fractures.
+- Slab thickness drops from 4.6 to 2.2 studs, with a thinner chipped underside. Stress accumulates at 2.5× the original rate.
+- Pickups fill separated sectors between 32% and 65% of platform radius, at least 22 studs apart.
+- Gladius and mace have unlimited uses during a round. They spend stamina and animate on misses. The mace is now a heavy overhead melee slam.
+- Original multi-keyframe sword/mace clips animate the weapon grip and body. Both push arms override walking; combat also takes priority over slide arm poses.
+- Detailed beveled blade, wrapped grip, pommel, chain and flanged mace geometry. Existing imported MeshPart templates are preserved.
+- Everyone arrives in a raised enclosed overlook, with walk-on map/mode voting behind them. Eliminated players return there and retain POV spectating.
+- Twelve additional upper arcade floors fade toward white/peach. A deeper layered chasm replaces the shallow flat void.
+- Stamina drains during sprinting, dashes, slides and melee attacks, then regenerates. Adrenaline comes only from successful combat hits: 16 for landing, 6 for receiving.
 
-The [quality notes](docs/quality-pass.md) record animation research, implementation details, limitations and the Studio acceptance pass.
+See [implementation and verification notes](docs/impact-overlook-pass.md).
 
 ## Controls
 
 | Action | Computer | Controller | Touch |
 | --- | --- | --- | --- |
-| Push | E / left-click | R2 | PUSH |
+| Push | E; left-click with no ranged/melee weapon selected | R2 | PUSH |
 | Grab/pull | Q | X | GRAB |
 | Pick up | R | Y | Pickup prompt |
 | Select item | 1 / 2 / 3 | LB / RB | Tap slot |
-| Use item | F | L2 | ITEM |
-| Sprint | Hold Left Shift | L3 toggle | SPRINT toggle |
+| Use item | F; left-click for sword/mace/bow | L2 | ITEM |
+| Sprint | Hold Left Ctrl | L3 toggle | SPRINT toggle |
 | Dash | X | B | DASH |
 | Slide | C | R3 | SLIDE |
 | Adrenaline rush | G | D-pad down | Tap ready bar |
-| Mouse lock | Right Shift | — | — |
+| Mouse lock | Left Shift | — | — |
 | Vote | Stand on a pad | Same | Same |
 | Spectate / POV | Spectator buttons | HUD navigation | Spectator buttons |
 
-Three item slots maximum. Aim bows at the crosshair; the mace acquires a nearby visible enemy in front of you. Combat primarily causes knockback. Grab is a quick pull, not a sustained carry.
+Three item slots maximum. Taking a pickup with a full inventory replaces the selected slot; the prompt says “Take / swap.” Aim bows at the crosshair; face your opponent for melee attacks. Combat primarily causes knockback. Grab is a quick pull, not a sustained carry.
 
 ## Round and arena
 
@@ -69,8 +70,8 @@ Meteor showers and lions are mutually exclusive major events, with warnings and 
 
 | Item | Uses | Effect |
 | --- | ---: | --- |
-| Gladius | 5 | Short-range slash, moderate knockback |
-| Chain mace | 3 | Warned, dodgeable pursuit projectile |
+| Gladius | Unlimited | Short-range slash, moderate knockback |
+| Chain mace | Unlimited | Overhead close-range slam; strikes the ground on a miss |
 | Shield | 2 | Each use blocks one hit within eight seconds |
 | Bow | 3 | Aimed knockback arrows |
 | Ram | 1 | Strong shove with recoil |
@@ -78,13 +79,14 @@ Meteor showers and lions are mutually exclusive major events, with warnings and 
 | Brace kit | 1 | Repairs 55% of slab durability; cannot restore fallen stone |
 | Weight block | 1 | Eight seconds of extra local weight |
 
-Adrenaline rewards attacks and risky positioning. At 100, activate a seven-second movement/push/resistance boost.
+Adrenaline rewards landing and receiving combat hits; positioning and environmental damage do not charge it. At 100, activate a seven-second movement/push/resistance boost.
 
 ## Development checks
 
 ```sh
 luau tests/Rules.spec.luau
 luau tests/StoneLayout.spec.luau
+python tests/run_engine_checks.py --luau /path/to/luau
 rojo build default.project.json --output UnstableArena.rbxlx
 ```
 

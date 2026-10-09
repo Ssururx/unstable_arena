@@ -1,5 +1,6 @@
 --!nonstrict
 local Models=require(game:GetService("ReplicatedStorage").Shared.ItemModels)
+local Config=require(game:GetService("ReplicatedStorage").Shared.Config)
 local Hotbar={}
 function Hotbar.build(parent,selectSlot)
 	local slots={}
@@ -50,7 +51,7 @@ function Hotbar.update(slots,player,touch)
 		end
 		-- Empty means empty: no slot numbers, item names, count or placeholder text.
 		slot.key.Text=if id and not touch then tostring(i) else ""
-		slot.uses.Text=if id then "×"..tostring(player:GetAttribute("Inventory"..i.."Uses") or 0) else ""
+		slot.uses.Text=if id and Config.Items[id].Permanent then "∞" elseif id then "×"..tostring(player:GetAttribute("Inventory"..i.."Uses") or 0) else ""
 		slot.bar.Visible=id~=nil and i==active
 		slot.stroke.Thickness=if id and i==active then 2 else 1
 		slot.stroke.Transparency=if id and i==active then .05 else .65

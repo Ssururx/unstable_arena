@@ -2,6 +2,7 @@
 local Config=require(game:GetService("ReplicatedStorage").Shared.Config)
 local U=require(script.Parent.Util)
 
+local Stamina=require(script.Parent.Stamina)
 local Movement={}; Movement.__index=Movement
 
 function Movement.new(round,arena,combat,fx)
@@ -17,6 +18,7 @@ end
 
 function Movement:Clear(p)
 	self.times[p]=nil
+	Stamina.reset(p)
 	self:EndBurst(p)
 	p:SetAttribute("Sprinting",false)
 	p:SetAttribute("SlidingUntil",0)
@@ -42,6 +44,10 @@ function Movement:Burst(p,direction,speed,duration,sliding)
 	self.bursts[p]={direction=direction,speed=speed,duration=duration,age=0,sliding=sliding}
 end
 function Movement:Step(dt)
+	for _,actor in self.round:Active() do
+		local _,hum=U.root(actor)
+		Stamina.step(actor,dt,hum and hum.MoveDirection.Magnitude>.05 and not hum.PlatformStand)
+	end
 	for p,burst in self.bursts do
 		local root,hum=U.root(p)
 		burst.age+=dt
@@ -56,7 +62,8 @@ end
 
 function Movement:Sprint(p,on)
 	if not self.round:IsActive(p) then p:SetAttribute("Sprinting",false); return end
-	p:SetAttribute("Sprinting",on==true)
+	on=on==true and (p:GetAttribute("Stamina") or Config.Stamina.Max)>5
+	p:SetAttribute("Sprinting",on)
 	local _,hum=U.root(p); if not hum then return end
 	local now=workspace:GetServerTimeNow()
 	hum.WalkSpeed=if now<(p:GetAttribute("AdrenalineUntil") or 0)
@@ -72,6 +79,7 @@ function Movement:Dash(p,aim)
 	if flat.Magnitude<.1 then flat=Vector3.new(root.CFrame.LookVector.X,0,root.CFrame.LookVector.Z) end
 	if flat.Magnitude<.1 then return end
 	flat=flat.Unit
+	if not Stamina.spend(p,Config.Stamina.DashCost) then return end
 	self:Burst(p,flat,Config.Movement.DashSpeed,.18,false)
 	local v=root.AssemblyLinearVelocity
 	root.AssemblyLinearVelocity=Vector3.new(flat.X*Config.Movement.DashSpeed,math.max(v.Y,2),flat.Z*Config.Movement.DashSpeed)
@@ -93,6 +101,7 @@ function Movement:Slide(p,aim)
 	local downhill=Vector3.new(0,-1,0)-normal*Vector3.new(0,-1,0):Dot(normal)
 	if downhill.Magnitude>.05 then flat=(flat+downhill.Unit*.42).Unit end
 	local momentum=Vector3.new(root.AssemblyLinearVelocity.X,0,root.AssemblyLinearVelocity.Z).Magnitude
+	if not Stamina.spend(p,Config.Stamina.SlideCost) then return end
 	self:Burst(p,flat,math.clamp(momentum+8,Config.Movement.SlideSpeed,55),.52,true)
 	local v=root.AssemblyLinearVelocity
 	root.AssemblyLinearVelocity=Vector3.new(flat.X*Config.Movement.SlideSpeed,math.min(v.Y,0),flat.Z*Config.Movement.SlideSpeed)

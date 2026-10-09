@@ -158,7 +158,7 @@ function Bots:Step()
 			bot.nextItem=os.clock()+.85+math.random()*.8
 			local id=actor:GetAttribute("Item")
 			local useNow=if id=="Sword" then distance<Config.Combat.SwordRange
-				elseif id=="Mace" then distance<Config.Combat.MaceLockRange
+				elseif id=="Mace" then distance<Config.Combat.MaceRange
 				elseif id=="Bow" then distance<65
 				elseif id=="Ram" then distance<10
 				elseif id=="Brace" then under and under.stress/under.durability>.4

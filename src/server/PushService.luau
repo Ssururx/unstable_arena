@@ -101,6 +101,7 @@ function Combat:Knock(target, velocity, attacker, isRescue)
 	return true
 end
 function Combat:Push(p, power, ram)
+	if not ram and (p:GetAttribute("ItemActionUntil") or 0)>workspace:GetServerTimeNow() then return false end
 	if not self:CanAct(p) or not self:Ready(p,"Push",Config.Combat.Cooldown) then return false end
 	local root,hum = U.root(p); if not root or hum.PlatformStand or root.Anchored then return false end
 	p:SetAttribute("SwingUntil",workspace:GetServerTimeNow()+.40)
@@ -123,6 +124,7 @@ function Combat:Push(p, power, ram)
 	return true
 end
 function Combat:Grab(p)
+	if math.max(p:GetAttribute("ItemActionUntil") or 0,p:GetAttribute("SwingUntil") or 0)>workspace:GetServerTimeNow() then return end
 	if not self:CanAct(p) or not self:Ready(p,"Grab",Config.Combat.GrabCooldown) then return end
 	local actionRoot,actionHum=U.root(p)
 	if not actionRoot or actionRoot.Anchored or actionHum.PlatformStand then return end

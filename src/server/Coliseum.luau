@@ -68,8 +68,8 @@ function Coliseum.light()
 		local old=Lighting:FindFirstChild(name); if old then old:Destroy() end
 	end
 	local atmosphere=Instance.new("Atmosphere"); atmosphere.Name="ArenaAtmosphere"; atmosphere.Density=.22
-	atmosphere.Offset=.12; atmosphere.Haze=2.05; atmosphere.Glare=.16
-	atmosphere.Color=Color3.fromRGB(216,199,165); atmosphere.Decay=Color3.fromRGB(119,105,87); atmosphere.Parent=Lighting
+	atmosphere.Offset=.12; atmosphere.Haze=2.5; atmosphere.Glare=.16
+	atmosphere.Color=Color3.fromRGB(245,225,207); atmosphere.Decay=Color3.fromRGB(119,105,87); atmosphere.Parent=Lighting
 	local grade=Instance.new("ColorCorrectionEffect"); grade.Name="ArenaGrade"; grade.Contrast=.09
 	grade.Saturation=-.14; grade.TintColor=Color3.fromRGB(255,245,227); grade.Parent=Lighting
 	local bloom=Instance.new("BloomEffect"); bloom.Name="ArenaBloom"; bloom.Intensity=.08; bloom.Size=20; bloom.Threshold=1.6; bloom.Parent=Lighting
@@ -120,18 +120,32 @@ function Coliseum.build(world)
 	G.ring(building,"Foundation",276,10,102,34,shadow,material,112,.97)
 	G.ring(building,"OuterParapet",268,1,178,4,pale,material,112,.97)
 
-	-- Distant seating fades into the atmosphere so the arena feels far larger than the playable shell.
-	for row=0,11 do
-		local distantRadius=292+row*12.5
-		local y=198+row*3.8
-		local fade=math.clamp(row/11,0,1)
-		local c=pale:Lerp(Color3.fromRGB(199,190,176),fade*.55)
-		for _,part in G.ring(building,"DistantTier",distantRadius,10.8,y,2.2,c,material,48,.98) do
-			part.Transparency=0
-			part.CanCollide=false
-			part.CanQuery=false
-			part.CastShadow=false
-			part.CanTouch=false
+	-- Simplified upper arcades: repeated floors lose contrast into pale peach haze.
+	local heights=model(building,"EndlessUpperArcades")
+	for level=0,11 do
+		local radius=292+level*5.5
+		local y=211+level*25
+		local fade=(level/11)^.75
+		local c=pale:Lerp(Color3.fromRGB(255,236,220),fade)
+		local upper=model(heights,"UpperFloor_"..level)
+		for i=0,35 do
+			local a=i/36*math.pi*2
+			local cf=CFrame.new(math.sin(a)*radius,y,math.cos(a)*radius*.98)*CFrame.Angles(0,a,0)
+			local width=2*radius*math.tan(math.pi/36)
+			local archRadius=width*.30; local spring=23-archRadius
+			U.part(upper,"DistantPier",Vector3.new(width-archRadius*2,spring,4),cf*CFrame.new(-width/2,spring/2,0),c,material)
+			for segment=0,4 do
+				local angle=(segment+.5)/5*math.pi
+				U.part(upper,"DistantArchStone",Vector3.new(math.pi*archRadius/5+.2,2.6,4),
+					cf*CFrame.new(math.cos(angle)*archRadius,spring+math.sin(angle)*archRadius,0)*CFrame.Angles(0,0,angle-math.pi/2),c,material)
+			end
+		end
+		G.ring(upper,"UpperCornice",radius,6,y+23,1.8,c,material,48,.98)
+		for _,part in upper:GetDescendants() do
+			if part:IsA("BasePart") then
+				part.CanCollide=false; part.CanQuery=false; part.CanTouch=false; part.CastShadow=false
+				part.Transparency=math.max(0,(fade-.72)*1.8)
+			end
 		end
 	end
 	-- Banners, bronze brackets and limited warm lights set the visual rhythm.
@@ -143,18 +157,27 @@ function Coliseum.build(world)
 		G.line(building,"BannerRod",(cf*CFrame.new(-4,8,0)).Position,(cf*CFrame.new(4,8,0)).Position,.2,bronze,Enum.Material.Metal)
 		if i%2 == 0 and i~=6 then torch(building,CFrame.new(math.sin(a)*151,132,math.cos(a)*151*.97)) end
 	end
-	-- Dark depth, a masonry support drum, and strata inside the chasm.
-	G.ring(building,"ChasmWall",140,12,64,112,Color3.fromRGB(50,48,46),Enum.Material.Rock,96,1)
-	local drum=G.cylinder(building,"SupportDrum",11.5,104,CFrame.new(0,68,0),Color3.fromRGB(55,53,52),Enum.Material.Slate)
-	local capital=G.cylinder(building,"SupportCapital",15,4,CFrame.new(0,120,0),bronze,material)
-	drum.CanCollide=false; drum.CanQuery=false; capital.CanCollide=false; capital.CanQuery=false
-	local pit=G.cylinder(building,"Void",138,5,CFrame.new(0,11,0),Color3.fromRGB(4,5,7),Enum.Material.SmoothPlastic)
-	pit.CanCollide=false; pit.CanQuery=false
-	for i=0,4 do
-		local ring=G.ring(building,"AbyssCourse",135-i*5,4,25+i*15,3,Color3.fromRGB(42+i*4,40+i*4,39+i*4),Enum.Material.Rock,80,1)
-		for _,part in ring do part.Transparency=.16+i*.08; part.CanCollide=false; part.CanQuery=false end
+	-- A deep shaft with broken masonry strata; its bottom is hidden well below elimination.
+	local abyss=model(building,"Abyss")
+	for level=0,7 do
+		local y=105-level*28
+		local shade=Color3.fromRGB(52,47,45):Lerp(Color3.fromRGB(6,8,13),level/7)
+		G.ring(abyss,"ChasmStratum",140+level*.7,10,y,29,shade,Enum.Material.Rock,64,1)
+		G.ring(abyss,"BrokenLedge",137+level*.7,4,y+10,2.4,shade,Enum.Material.Slate,48,1)
 	end
-	local lobby=model(world,"LobbyCourtyard")
+	G.cylinder(abyss,"SupportDrum",11.5,238,CFrame.new(0,0,0),Color3.fromRGB(49,47,46),Enum.Material.Slate)
+	G.cylinder(abyss,"SupportCapital",14,2,CFrame.new(0,119.9,0),bronze,material)
+	for y=-100,105,24 do
+		G.cylinder(abyss,"DrumCourse",11.9,.9,CFrame.new(0,y,0),Color3.fromRGB(63,56,48),material)
+	end
+	for layer=0,5 do
+		local veil=G.cylinder(abyss,"DepthHaze",139,1,CFrame.new(0,-30-layer*23,0),Color3.fromRGB(10,12,18),Enum.Material.SmoothPlastic)
+		veil.Transparency=if layer==5 then 0 else .82
+	end
+	for _,part in abyss:GetDescendants() do
+		if part:IsA("BasePart") then part.CanCollide=false; part.CanQuery=false; part.CanTouch=false; part.CastShadow=false end
+	end
+	local lobby=model(world,"OverlookBox")
 	U.part(lobby,"CourtyardFloor",Vector3.new(94,3,70),CFrame.new(0,128.5,-184),stone,material)
 	for _,x in {-43,43} do
 		U.part(lobby,"CourtyardInlay",Vector3.new(.3,.035,62),CFrame.new(x,130.02,-184),bronze,Enum.Material.Metal).CanCollide=false
@@ -197,6 +220,23 @@ function Coliseum.build(world)
 		end
 		table.insert(pads,{part=base,index=i,title=title,small=small,edge=edgePart,boardParts={frame,panel},medallion=medallion,symbol=symbol})
 	end
-	return {spawn=CFrame.lookAt(Vector3.new(0,134,-162),Vector3.new(0,134,-207)),pads=pads,lobby=lobby,header=headerTitle,headerHint=headerHint}
+	-- Preserve the walk-on voting gallery inside a safe observation box.
+	local lift=Vector3.new(0,88,-40)
+	for _,part in lobby:GetDescendants() do
+		if part:IsA("BasePart") then part.CFrame=part.CFrame+lift end
+	end
+	U.part(lobby,"BoxBackWall",Vector3.new(98,28,2),CFrame.new(0,232,-260),stone,material)
+	U.part(lobby,"BoxCeiling",Vector3.new(98,2,72),CFrame.new(0,246,-224),pale,material)
+	for _,side in {-1,1} do
+		U.part(lobby,"BoxSideWall",Vector3.new(2,28,72),CFrame.new(side*48,232,-224),stone,material)
+		U.part(lobby,"ViewingColumn",Vector3.new(3,27,3),CFrame.new(side*45,232,-189),pale,material)
+	end
+	U.part(lobby,"ViewingSill",Vector3.new(94,3,2),CFrame.new(0,219.5,-189),stone,material)
+	local glass=U.part(lobby,"ViewingWindow",Vector3.new(90,25,.35),CFrame.new(0,233,-189),Color3.fromRGB(230,222,210),Enum.Material.Glass)
+	glass.Transparency=.94; glass.CastShadow=false
+	U.part(lobby,"WindowRail",Vector3.new(94,.45,1.2),CFrame.new(0,221.2,-189),bronze,Enum.Material.Metal)
+	local arrival=CFrame.lookAt(Vector3.new(0,222,-199),Vector3.new(0,222,0))
+	spawn.CFrame=arrival*CFrame.new(0,-3.9,0)
+	return {spawn=arrival,practice=CFrame.new(32,222,-214),pads=pads,lobby=lobby,header=headerTitle,headerHint=headerHint}
 end
 return Coliseum
